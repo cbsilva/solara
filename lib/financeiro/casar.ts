@@ -128,7 +128,7 @@ function casarCredito(
       }
     }
 
-    // NF encontrada mas valor diferente
+    // NF citada mas sem titulo em aberto com a mesma nota e valor
     return {
       lancamento: {
         ...lancamento,
@@ -137,7 +137,7 @@ function casarCredito(
       },
       tipo_inicial: 'valor_diferente_mesma_nf',
       situacao: 'divergente',
-      cod_titulo: tituloNF?.cod_titulo,
+      cod_titulo: undefined,
     }
   }
 

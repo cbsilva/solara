@@ -1,10 +1,28 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Solara OS',
-  description: 'Sistema de Gestão Solara - Automação com IA',
-  viewport: 'width=device-width, initial-scale=1.0',
+  description: 'Sistema de gestão da Solara Distribuidora — automação com IA',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#cc785c',
 }
 
 export default function RootLayout({
@@ -13,15 +31,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR" className="scroll-smooth">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="theme-color" content="#1e40af" />
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75' fill='%231e40af'>S</text></svg>" />
-      </head>
-      <body className="bg-gray-50 text-gray-900 antialiased">
-        {children}
-      </body>
+    <html lang="pt-BR" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <body>{children}</body>
     </html>
   )
 }

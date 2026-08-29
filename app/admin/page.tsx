@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Header } from '@/components/Header'
+import { Icon } from '@/components/Icon'
 
 interface Perfil {
   id: string
@@ -14,15 +15,14 @@ interface Perfil {
 }
 
 const AREAS = ['vendas', 'financeiro', 'rh', 'juridico', 'operacoes']
-const PAPEIS = ['admin', 'operador']
+const PAPEIS = ['operador', 'admin']
 
 export default function AdminPage() {
   const [perfis, setPerfis] = useState<Perfil[]>([])
   const [user, setUser] = useState<{ email: string; id: string } | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [carregando, setCarregando] = useState(true)
   const router = useRouter()
 
-  // Formulário
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
@@ -33,89 +33,63 @@ export default function AdminPage() {
   const [sucesso, setSucesso] = useState('')
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const verificar = async () => {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-
       if (!session) {
         router.push('/login')
         return
       }
-
       setUser({ email: session.user.email || '', id: session.user.id })
 
-      const { data: perfil } = await supabase
-        .from('perfis')
-        .select()
-        .eq('id', session.user.id)
-        .single()
-
+      const { data: perfil } = await supabase.from('perfis').select().eq('id', session.user.id).single()
       if (perfil?.papel !== 'admin') {
         router.push('/')
         return
       }
 
-      const { data } = await supabase
-        .from('perfis')
-        .select()
-        .order('criado_em', { ascending: false })
-
-      if (data) {
-        setPerfis(data as Perfil[])
-      }
-
-      setLoading(false)
+      await buscarPerfis()
+      setCarregando(false)
     }
-
-    checkAuth()
+    verificar()
   }, [router])
 
-  const handleToggleArea = (area: string) => {
-    setAreasForm((prev) =>
-      prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]
-    )
+  const buscarPerfis = async () => {
+    const supabase = createClient()
+    const { data } = await supabase.from('perfis').select().order('criado_em', { ascending: false })
+    if (data) setPerfis(data as Perfil[])
   }
 
-  const handleCriarUsuario = async (e: React.FormEvent) => {
+  const alternarArea = (area: string) => {
+    setAreasForm((prev) => (prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]))
+  }
+
+  const criarUsuario = async (e: React.FormEvent) => {
     e.preventDefault()
     setErro('')
     setSucesso('')
     setCriando(true)
-
     try {
       if (!email || !senha || !nome || areasForm.length === 0) {
-        throw new Error('Preencha todos os campos e selecione pelo menos uma área')
+        throw new Error('Preencha todos os campos e escolha ao menos uma área.')
       }
-
       const res = await fetch('/api/admin/criar-usuario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, senha, nome, papel, areas: areasForm }),
       })
-
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.erro || 'Erro ao criar usuário')
       }
-
-      setSucesso('✅ Usuário criado com sucesso!')
+      setSucesso('Usuário criado com sucesso.')
       setEmail('')
       setSenha('')
       setNome('')
       setPapel('operador')
       setAreasForm([])
-
-      const supabase = createClient()
-      const { data } = await supabase
-        .from('perfis')
-        .select()
-        .order('criado_em', { ascending: false })
-
-      if (data) {
-        setPerfis(data as Perfil[])
-      }
-
-      setTimeout(() => setSucesso(''), 3000)
+      await buscarPerfis()
+      setTimeout(() => setSucesso(''), 4000)
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Erro ao criar usuário')
     } finally {
@@ -123,198 +97,129 @@ export default function AdminPage() {
     }
   }
 
-  if (loading) {
+  if (carregando) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
+      <div className="carregando-tela">
+        <span className="spinner spinner--lg" />
+        <p>Carregando…</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header
-        titulo="Administração de Usuários"
-        usuarioEmail={user?.email}
-        mostraLogout
-      />
+    <div className="pagina-app">
+      <Header contexto="Administração" usuarioEmail={user?.email} mostraInicio mostraLogout />
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        {/* Grid 2 colunas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <main className="app-main">
+        <div style={{ marginBottom: 'var(--sp-6)' }}>
+          <h1 className="app-titulo">Usuários</h1>
+          <p className="app-subtitulo">Crie acessos e defina papel e áreas de cada pessoa.</p>
+        </div>
+
+        <div className="admin-grade">
           {/* Formulário */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">➕ Criar Novo Usuário</h2>
-
-            <form onSubmit={handleCriarUsuario} className="space-y-6">
-              {/* Email */}
-              <div>
-                <label className="label">📧 Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@empresa.com"
-                  className="input-field"
-                  required
-                />
+          <form className="card" onSubmit={criarUsuario}>
+            <div className="card-head">
+              <Icon type="conta" size="md" />
+              Novo usuário
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+              <div className="field">
+                <label htmlFor="a-email">E-mail</label>
+                <input id="a-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@solara.com.br" required />
               </div>
-
-              {/* Senha */}
-              <div>
-                <label className="label">🔒 Senha Inicial</label>
-                <input
-                  type="password"
-                  value={senha}
-                  onChange={(e) => setSenha(e.target.value)}
-                  placeholder="Sua senha segura"
-                  className="input-field"
-                  required
-                />
+              <div className="field">
+                <label htmlFor="a-senha">Senha inicial</label>
+                <input id="a-senha" type="password" className="input" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha temporária" required />
               </div>
-
-              {/* Nome */}
-              <div>
-                <label className="label">👤 Nome</label>
-                <input
-                  type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  placeholder="Nome completo"
-                  className="input-field"
-                  required
-                />
+              <div className="field">
+                <label htmlFor="a-nome">Nome</label>
+                <input id="a-nome" type="text" className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" required />
               </div>
-
-              {/* Papel */}
-              <div>
-                <label className="label">🎭 Papel</label>
-                <select
-                  value={papel}
-                  onChange={(e) => setPapel(e.target.value)}
-                  className="input-field"
-                >
-                  {PAPEIS.map((p) => (
-                    <option key={p} value={p}>
-                      {p === 'admin' ? '👑 Admin' : '👥 Operador'}
-                    </option>
-                  ))}
-                </select>
+              <div className="field">
+                <label htmlFor="a-papel">Papel</label>
+                <div className="select-wrap">
+                  <select id="a-papel" className="select" value={papel} onChange={(e) => setPapel(e.target.value)}>
+                    {PAPEIS.map((p) => (
+                      <option key={p} value={p}>{p === 'admin' ? 'Admin' : 'Operador'}</option>
+                    ))}
+                  </select>
+                  <Icon type="chevron-baixo" size="sm" />
+                </div>
               </div>
-
-              {/* Áreas */}
-              <div>
-                <label className="label">📊 Áreas de Acesso</label>
-                <div className="space-y-2">
+              <div className="field">
+                <label>Áreas de acesso</label>
+                <div className="checklist">
                   {AREAS.map((area) => (
-                    <label
-                      key={area}
-                      className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={areasForm.includes(area)}
-                        onChange={() => handleToggleArea(area)}
-                        className="w-5 h-5 text-blue-600 rounded cursor-pointer"
-                      />
-                      <span className="font-medium text-gray-700 capitalize">
-                        {area === 'vendas' && '📋 Vendas'}
-                        {area === 'financeiro' && '💰 Financeiro'}
-                        {area === 'rh' && '👥 RH'}
-                        {area === 'juridico' && '⚖️ Jurídico'}
-                        {area === 'operacoes' && '⚙️ Operações'}
-                      </span>
+                    <label key={area} className="ctl">
+                      <input type="checkbox" checked={areasForm.includes(area)} onChange={() => alternarArea(area)} />
+                      <span style={{ textTransform: 'capitalize' }}>{area}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              {/* Mensagens */}
               {erro && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 text-sm font-medium">❌ {erro}</p>
+                <div className="aviso aviso--erro">
+                  <Icon type="alerta" size="sm" />
+                  <span>{erro}</span>
                 </div>
               )}
               {sucesso && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 text-sm font-medium">{sucesso}</p>
+                <div className="aviso aviso--ok">
+                  <Icon type="check" size="sm" />
+                  <span>{sucesso}</span>
                 </div>
               )}
-
-              {/* Botão */}
-              <button
-                type="submit"
-                disabled={criando}
-                className="w-full btn-primary disabled:opacity-70"
-              >
-                {criando ? '⏳ Criando...' : '✓ Criar Usuário'}
-              </button>
-            </form>
-          </div>
-
-          {/* Tabela de Usuários */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-6 md:px-8 py-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900">👥 Usuários Cadastrados</h2>
-              <p className="text-sm text-gray-600 mt-1">Total: {perfis.length}</p>
             </div>
+            <div className="card-foot">
+              <button type="submit" className="btn btn--primary" disabled={criando}>
+                {criando ? <span className="spinner" /> : <Icon type="check" size="sm" />}
+                {criando ? 'Criando…' : 'Criar usuário'}
+              </button>
+            </div>
+          </form>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+          {/* Tabela */}
+          <div className="tabela-wrap">
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>E-mail</th>
+                  <th>Nome</th>
+                  <th>Papel</th>
+                  <th>Áreas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perfis.length === 0 ? (
                   <tr>
-                    <th className="px-6 py-3 text-left font-semibold text-gray-700">Email</th>
-                    <th className="px-6 py-3 text-left font-semibold text-gray-700">Nome</th>
-                    <th className="px-6 py-3 text-left font-semibold text-gray-700">Papel</th>
-                    <th className="px-6 py-3 text-left font-semibold text-gray-700">Áreas</th>
+                    <td colSpan={4}>
+                      <p className="estado-vazio">Nenhum usuário cadastrado</p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {perfis.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                        Nenhum usuário cadastrado
+                ) : (
+                  perfis.map((perfil) => (
+                    <tr key={perfil.id}>
+                      <td style={{ color: 'var(--text-strong)', fontWeight: 500 }}>{perfil.email}</td>
+                      <td>{perfil.nome}</td>
+                      <td>
+                        <span className={`badge ${perfil.papel === 'admin' ? 'badge--promo' : 'badge--neutral'}`}>
+                          {perfil.papel === 'admin' ? 'Admin' : 'Operador'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {perfil.areas.map((a) => (
+                            <span key={a} className="badge badge--neutral">{a}</span>
+                          ))}
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    perfis.map((perfil) => (
-                      <tr key={perfil.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <span className="text-gray-900 font-medium">{perfil.email}</span>
-                        </td>
-                        <td className="px-6 py-4 text-gray-700">{perfil.nome}</td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
-                              perfil.papel === 'admin'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}
-                          >
-                            {perfil.papel === 'admin' ? '👑 Admin' : '👥 Operador'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-wrap gap-1">
-                            {perfil.areas.map((area) => (
-                              <span
-                                key={area}
-                                className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700"
-                              >
-                                {area}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </main>

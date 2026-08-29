@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Organograma } from '@/components/Organograma'
 import { FilaAprovacao } from '@/components/FilaAprovacao'
+import { Header } from '@/components/Header'
+import { Icon } from '@/components/Icon'
 import { limparExtrato } from '@/lib/financeiro/limpar'
 import { casarLancamentos } from '@/lib/financeiro/casar'
 
@@ -15,13 +17,14 @@ interface Lancamento {
   tipo: 'credito' | 'debito'
 }
 
+const brl = (n: number) =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 export default function FinanceiroPage() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
-  const [perfil, setPerfil] = useState<{ areas: string[] } | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [carregando, setCarregando] = useState(true)
   const [aba, setAba] = useState<'importar' | 'resultado' | 'relatorio' | 'aprovacoes'>('importar')
 
-  // Upload
   const [arquivoExtrato, setArquivoExtrato] = useState<File | null>(null)
   const [arquivoTitulos, setArquivoTitulos] = useState<File | null>(null)
   const [linhasAntes, setLinhasAntes] = useState<string[]>([])
@@ -32,79 +35,58 @@ export default function FinanceiroPage() {
   const router = useRouter()
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const verificar = async () => {
       const supabase = createClient()
       const { data: { session } } = await supabase.auth.getSession()
-
       if (!session) {
         router.push('/login')
         return
       }
-
       setUser({ id: session.user.id, email: session.user.email || '' })
 
-      // Verificar permissão
-      const { data: perfilData } = await supabase
-        .from('perfis')
-        .select()
-        .eq('id', session.user.id)
-        .single()
-
-      if (!perfilData?.areas?.includes('financeiro')) {
+      const { data: perfil } = await supabase.from('perfis').select().eq('id', session.user.id).single()
+      if (!perfil?.areas?.includes('financeiro')) {
         router.push('/')
         return
       }
-
-      setPerfil(perfilData)
-      setLoading(false)
+      setCarregando(false)
     }
-
-    checkAuth()
+    verificar()
   }, [router])
 
-  const handleUploadExtrato = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadExtrato = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     setArquivoExtrato(file)
-
-    // Ler e processar arquivo
     const texto = await file.text()
-    const linhas = texto.split('\n').slice(0, 6)
-    setLinhasAntes(linhas)
-
+    setLinhasAntes(texto.split('\n').slice(0, 6))
     try {
-      const lancamentos = limparExtrato(texto)
-      setLinhasDepois(lancamentos.slice(0, 6))
+      setLinhasDepois(limparExtrato(texto).slice(0, 6))
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao processar arquivo')
     }
   }
 
-  const handleConciliar = async () => {
+  const conciliar = async () => {
     if (!arquivoExtrato) {
       alert('Selecione o arquivo de extrato')
       return
     }
-
     setConciliando(true)
-
     try {
-      // 1. Upload e limpeza
       const texto = await arquivoExtrato.text()
       const lancamentos = limparExtrato(texto)
 
-      // 2. Buscar títulos
       const supabase = createClient()
       const { data: titulos } = await supabase
         .from('titulos_receber')
-        .select('cod_titulo, valor, vencimento, status, nota_fiscal')
+        .select('cod_titulo, cod_cliente, valor, vencimento, status, nota_fiscal')
 
-      // 3. Casar
-      const { lancamentos: lancamentosProcessados, divergencias } = casarLancamentos(
+      const { lancamentos: processados, divergencias } = casarLancamentos(
         lancamentos,
         titulos?.map((t: any) => ({
           cod_titulo: t.cod_titulo,
+          cod_cliente: t.cod_cliente,
           valor: t.valor,
           vencimento: t.vencimento,
           status: t.status,
@@ -112,7 +94,6 @@ export default function FinanceiroPage() {
         })) || []
       )
 
-      // 4. Salvar no Supabase
       const { data: novoExtrato } = await supabase
         .from('extratos_importados')
         .insert({
@@ -120,40 +101,36 @@ export default function FinanceiroPage() {
           importado_em: new Date().toISOString(),
           importado_por: user?.id,
           total_linhas: lancamentos.length,
-          total_creditos: lancamentos
-            .filter((l) => l.tipo === 'credito')
-            .reduce((sum, l) => sum + l.valor, 0),
+          total_creditos: lancamentos.filter((l) => l.tipo === 'credito').reduce((s, l) => s + l.valor, 0),
         })
         .select()
         .single()
 
       if (!novoExtrato) throw new Error('Erro ao criar extrato')
 
-      // 5. Inserir lançamentos
-      const lancamentosParaSalvar = lancamentosProcessados.map((l) => ({
-        extrato_id: novoExtrato.id,
-        data: l.data,
-        descricao: l.descricao,
-        valor: l.valor,
-        tipo: l.tipo,
-        cod_titulo_casado: l.cod_titulo_casado || null,
-        situacao: l.situacao,
-      }))
+      await supabase.from('lancamentos').insert(
+        processados.map((l) => ({
+          extrato_id: novoExtrato.id,
+          data: l.data,
+          descricao: l.descricao,
+          valor: l.valor,
+          tipo: l.tipo,
+          cod_titulo_casado: l.cod_titulo_casado || null,
+          situacao: l.situacao,
+        }))
+      )
 
-      await supabase.from('lancamentos').insert(lancamentosParaSalvar)
-
-      // 6. Inserir divergências
-      const divergenciasParaSalvar = divergencias.map((d) => ({
-        extrato_id: novoExtrato.id,
-        tipo_inicial: d.tipo_inicial,
-        lancamento_id: null,
-        cod_titulo: d.cod_titulo || null,
-        valor_lancamento: d.lancamento.valor,
-        valor_titulo: null,
-        status: 'nova',
-      }))
-
-      await supabase.from('divergencias').insert(divergenciasParaSalvar)
+      await supabase.from('divergencias').insert(
+        divergencias.map((d) => ({
+          extrato_id: novoExtrato.id,
+          tipo_inicial: d.tipo_inicial,
+          lancamento_id: null,
+          cod_titulo: d.cod_titulo || null,
+          valor_lancamento: d.lancamento.valor,
+          valor_titulo: null,
+          status: 'nova',
+        }))
+      )
 
       setExtratoId(novoExtrato.id)
       setAba('resultado')
@@ -164,166 +141,116 @@ export default function FinanceiroPage() {
     }
   }
 
-  if (loading) return <div style={{ padding: '20px' }}>Carregando...</div>
+  if (carregando) {
+    return (
+      <div className="carregando-tela">
+        <span className="spinner spinner--lg" />
+        <p>Carregando…</p>
+      </div>
+    )
+  }
+
+  const abas = [
+    { id: 'importar', rotulo: 'Importar', icone: 'upload' as const },
+    { id: 'resultado', rotulo: 'Resultado', icone: 'painel' as const },
+    { id: 'relatorio', rotulo: 'Relatório', icone: 'cotacoes' as const },
+    { id: 'aprovacoes', rotulo: 'Aprovações', icone: 'check-duplo' as const },
+  ]
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      {/* Header */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '15px 20px' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-          <h2 style={{ margin: 0 }}>Financeiro</h2>
-        </div>
-      </div>
+    <div className="pagina-app">
+      <Header contexto="Financeiro · Conciliação" usuarioEmail={user?.email} mostraInicio mostraLogout />
 
-      {/* Organograma */}
-      {extratoId && (
-        <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '15px 20px' }}>
-          <div style={{ maxWidth: '1400px', margin: '0 auto', minHeight: '100px' }}>
-            <Organograma area="financeiro" item_id={extratoId} />
+      <main className="app-main">
+        <div style={{ marginBottom: 'var(--sp-6)' }}>
+          <h1 className="app-titulo">Conciliação bancária</h1>
+          <p className="app-subtitulo">Importe o extrato, concilie e investigue as divergências.</p>
+        </div>
+
+        {extratoId && (
+          <div className="card" style={{ marginBottom: 'var(--sp-5)' }}>
+            <div className="card-head">
+              <Icon type="assistente" size="md" />
+              Execução da conciliação
+            </div>
+            <div className="card-body">
+              <Organograma area="financeiro" item_id={extratoId} />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Abas */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '0 20px' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', gap: '20px' }}>
-          {['importar', 'resultado', 'relatorio', 'aprovacoes'].map((t) => (
+        <div className="tabs" style={{ marginBottom: 'var(--sp-5)' }}>
+          {abas.map((t) => (
             <button
-              key={t}
-              onClick={() => setAba(t as any)}
-              style={{
-                padding: '12px 20px',
-                backgroundColor: aba === t ? '#1976d2' : 'transparent',
-                color: aba === t ? 'white' : '#333',
-                border: 'none',
-                borderBottom: aba === t ? '3px solid #1976d2' : 'none',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                textTransform: 'capitalize',
-              }}
+              key={t.id}
+              className={`tab ${aba === t.id ? 'is-ativo' : ''}`}
+              onClick={() => setAba(t.id as typeof aba)}
             >
-              {t}
+              <Icon type={t.icone} size="sm" />
+              {t.rotulo}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Conteúdo */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px' }}>
         {aba === 'importar' && (
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-              {/* Upload */}
-              <div>
-                <h3>Upload de Extrato</h3>
-                <div
-                  style={{
-                    border: '2px dashed #1976d2',
-                    borderRadius: '8px',
-                    padding: '40px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => document.getElementById('fileExtrato')?.click()}
-                >
-                  <div style={{ fontSize: '48px', marginBottom: '10px' }}>📄</div>
-                  <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                    {arquivoExtrato?.name || 'Clique para selecionar extrato'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#999' }}>CSV do banco</div>
-                  <input
-                    id="fileExtrato"
-                    type="file"
-                    accept=".csv,.txt"
-                    onChange={handleUploadExtrato}
-                    style={{ display: 'none' }}
-                  />
+          <div className="importar-grade">
+            <div className="card">
+              <div className="card-head">Arquivos</div>
+              <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+                <div>
+                  <label className="dropzone" htmlFor="fileExtrato">
+                    <Icon type="upload" size="lg" />
+                    <strong>{arquivoExtrato?.name || 'Selecionar extrato'}</strong>
+                    <span>CSV do banco (obrigatório)</span>
+                    <input id="fileExtrato" type="file" accept=".csv,.txt" onChange={uploadExtrato} hidden />
+                  </label>
                 </div>
 
-                <h3 style={{ marginTop: '20px' }}>Upload de Títulos (opcional)</h3>
-                <div
-                  style={{
-                    border: '2px dashed #999',
-                    borderRadius: '8px',
-                    padding: '40px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => document.getElementById('fileTitulos')?.click()}
-                >
-                  <div style={{ fontSize: '48px', marginBottom: '10px' }}>📊</div>
-                  <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                    {arquivoTitulos?.name || 'Clique para selecionar títulos'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#999' }}>CSV de títulos</div>
-                  <input
-                    id="fileTitulos"
-                    type="file"
-                    accept=".csv,.txt"
-                    onChange={(e) => setArquivoTitulos(e.target.files?.[0] || null)}
-                    style={{ display: 'none' }}
-                  />
+                <div>
+                  <label className="dropzone dropzone--opcional" htmlFor="fileTitulos">
+                    <Icon type="upload" size="lg" />
+                    <strong>{arquivoTitulos?.name || 'Selecionar títulos'}</strong>
+                    <span>CSV de títulos (opcional)</span>
+                    <input
+                      id="fileTitulos"
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={(e) => setArquivoTitulos(e.target.files?.[0] || null)}
+                      hidden
+                    />
+                  </label>
                 </div>
-
+              </div>
+              <div className="card-foot">
                 <button
-                  onClick={handleConciliar}
+                  type="button"
+                  className="btn btn--primary btn--block"
+                  onClick={conciliar}
                   disabled={!arquivoExtrato || conciliando}
-                  style={{
-                    marginTop: '20px',
-                    width: '100%',
-                    padding: '12px',
-                    backgroundColor: conciliando || !arquivoExtrato ? '#ccc' : '#4caf50',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: conciliando || !arquivoExtrato ? 'default' : 'pointer',
-                    fontWeight: 'bold',
-                  }}
                 >
-                  {conciliando ? 'Conciliando...' : 'Conciliar'}
+                  {conciliando ? <span className="spinner" /> : <Icon type="raio" size="sm" />}
+                  {conciliando ? 'Conciliando…' : 'Conciliar'}
                 </button>
               </div>
+            </div>
 
-              {/* Preview */}
-              <div>
-                <h3>Antes e Depois</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="card">
+              <div className="card-head">Antes e depois</div>
+              <div className="card-body">
+                <div className="antes-depois">
                   <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>Arquivo Original</div>
-                    <div
-                      style={{
-                        backgroundColor: '#f5f5f5',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        fontFamily: 'monospace',
-                        fontSize: '11px',
-                        maxHeight: '400px',
-                        overflow: 'auto',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {linhasAntes.join('\n')}
-                    </div>
+                    <p className="rotulo-mini">Arquivo original</p>
+                    <pre className="preview">{linhasAntes.join('\n') || '—'}</pre>
                   </div>
                   <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>Normalizado</div>
-                    <div
-                      style={{
-                        backgroundColor: '#f5f5f5',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        fontFamily: 'monospace',
-                        fontSize: '11px',
-                        maxHeight: '400px',
-                        overflow: 'auto',
-                      }}
-                    >
-                      {linhasDepois.map((l, i) => (
-                        <div key={i}>
-                          {l.data} | {l.descricao.substring(0, 20)} | {l.valor.toFixed(2)} | {l.tipo}
-                        </div>
-                      ))}
-                    </div>
+                    <p className="rotulo-mini">Normalizado</p>
+                    <pre className="preview">
+                      {linhasDepois.length === 0
+                        ? '—'
+                        : linhasDepois
+                            .map((l) => `${l.data}  ${l.descricao.slice(0, 22).padEnd(22)}  ${l.valor.toFixed(2)}  ${l.tipo}`)
+                            .join('\n')}
+                    </pre>
                   </div>
                 </div>
               </div>
@@ -331,20 +258,18 @@ export default function FinanceiroPage() {
           </div>
         )}
 
-        {aba === 'resultado' && extratoId && (
-          <ResultadoLancamentos extrato_id={extratoId} />
-        )}
+        {aba === 'resultado' && extratoId && <ResultadoLancamentos extrato_id={extratoId} />}
+        {aba === 'resultado' && !extratoId && <p className="estado-vazio">Importe e concilie um extrato primeiro.</p>}
 
-        {aba === 'relatorio' && extratoId && (
-          <RelatorioConciliacao extrato_id={extratoId} />
-        )}
+        {aba === 'relatorio' && extratoId && <RelatorioConciliacao extrato_id={extratoId} />}
+        {aba === 'relatorio' && !extratoId && <p className="estado-vazio">O relatório aparece após a investigação.</p>}
 
         {aba === 'aprovacoes' && user && (
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', height: '600px' }}>
+          <div className="card" style={{ height: 620, overflow: 'hidden' }}>
             <FilaAprovacao area="financeiro" usuarioId={user.id} />
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }
@@ -357,19 +282,11 @@ function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
   useEffect(() => {
     const buscar = async () => {
       const supabase = createClient()
-      const { data: l } = await supabase
-        .from('lancamentos')
-        .select()
-        .eq('extrato_id', extrato_id)
-      const { data: d } = await supabase
-        .from('divergencias')
-        .select()
-        .eq('extrato_id', extrato_id)
-
+      const { data: l } = await supabase.from('lancamentos').select().eq('extrato_id', extrato_id)
+      const { data: d } = await supabase.from('divergencias').select().eq('extrato_id', extrato_id)
       setLancamentos(l || [])
       setDivergencias(d || [])
     }
-
     buscar()
   }, [extrato_id])
 
@@ -377,7 +294,7 @@ function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
   const divergentes = divergencias.filter((d) => d.status !== 'resolvida')
   const ignorados = lancamentos.filter((l) => l.situacao === 'ignorado')
 
-  const handleProcessar = async () => {
+  const investigar = async () => {
     setProcessando(true)
     try {
       const res = await fetch('/api/financeiro/conciliar', {
@@ -385,7 +302,6 @@ function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ extrato_id }),
       })
-
       if (!res.ok) throw new Error('Erro ao processar')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro')
@@ -395,61 +311,57 @@ function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-      {/* Casados */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', borderLeft: '4px solid #4caf50' }}>
-        <h3 style={{ margin: '0 0 15px 0', color: '#4caf50' }}>Casados ({casados.length})</h3>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4caf50' }}>
-          R$ {casados.reduce((sum, l) => sum + l.valor, 0).toFixed(2)}
-        </div>
-        <div style={{ fontSize: '12px', color: '#999', marginTop: '10px' }}>
-          {casados.map((l) => (
-            <div key={l.id} style={{ padding: '4px 0', borderBottom: '1px solid #eee' }}>
-              {l.data} • {l.descricao.substring(0, 30)} • R$ {l.valor.toFixed(2)}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Divergências */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', borderLeft: '4px solid #ff9800' }}>
-        <h3 style={{ margin: '0 0 15px 0', color: '#ff9800' }}>Divergências ({divergentes.length})</h3>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ff9800' }}>
-          R$ {divergentes.reduce((sum, d) => sum + (d.valor_lancamento || 0), 0).toFixed(2)}
-        </div>
-        <button
-          onClick={handleProcessar}
-          disabled={processando || divergentes.length === 0}
-          style={{
-            marginTop: '10px',
-            width: '100%',
-            padding: '8px',
-            backgroundColor: processando || divergentes.length === 0 ? '#ccc' : '#2196f3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: processando || divergentes.length === 0 ? 'default' : 'pointer',
-          }}
-        >
-          {processando ? 'Investigando...' : 'Investigar'}
-        </button>
-        <div style={{ fontSize: '12px', color: '#999', marginTop: '10px' }}>
-          {divergentes.map((d) => (
-            <div key={d.id} style={{ padding: '4px 0', borderBottom: '1px solid #eee' }}>
-              {d.tipo_inicial} • R$ {d.valor_lancamento?.toFixed(2)}
-            </div>
-          ))}
+    <div className="resultado-grade">
+      <div className="card resultado-card">
+        <div className="card-body">
+          <span className="badge badge--success">Bateram · {casados.length}</span>
+          <p className="resultado-valor" style={{ color: 'var(--success-text)' }}>
+            {brl(casados.reduce((s, l) => s + l.valor, 0))}
+          </p>
+          <ul className="resultado-lista">
+            {casados.map((l) => (
+              <li key={l.id}>
+                <span>{l.data} · {l.descricao.slice(0, 28)}</span>
+                <span className="num">{brl(l.valor)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
-      {/* Ignorados */}
-      <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px', borderLeft: '4px solid #999' }}>
-        <h3 style={{ margin: '0 0 15px 0', color: '#999' }}>Ignorados ({ignorados.length})</h3>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#999' }}>
-          R$ {ignorados.reduce((sum, l) => sum + l.valor, 0).toFixed(2)}
+      <div className="card resultado-card">
+        <div className="card-body">
+          <span className="badge badge--warning">Divergências · {divergentes.length}</span>
+          <p className="resultado-valor" style={{ color: 'var(--warning-text)' }}>
+            {brl(divergentes.reduce((s, d) => s + (d.valor_lancamento || 0), 0))}
+          </p>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm btn--block"
+            onClick={investigar}
+            disabled={processando || divergentes.length === 0}
+          >
+            {processando ? <span className="spinner" /> : <Icon type="assistente" size="sm" />}
+            {processando ? 'Investigando…' : 'Investigar'}
+          </button>
+          <ul className="resultado-lista">
+            {divergentes.map((d) => (
+              <li key={d.id}>
+                <span>{d.tipo_inicial}</span>
+                <span className="num">{brl(d.valor_lancamento || 0)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div style={{ fontSize: '12px', color: '#ccc', marginTop: '10px' }}>
-          Débitos não processados
+      </div>
+
+      <div className="card resultado-card">
+        <div className="card-body">
+          <span className="badge badge--neutral">Ignorados · {ignorados.length}</span>
+          <p className="resultado-valor" style={{ color: 'var(--text-faint)' }}>
+            {brl(ignorados.reduce((s, l) => s + l.valor, 0))}
+          </p>
+          <p className="app-subtitulo">Débitos não processados na conciliação.</p>
         </div>
       </div>
     </div>
@@ -462,33 +374,23 @@ function RelatorioConciliacao({ extrato_id }: { extrato_id: string }) {
   useEffect(() => {
     const buscar = async () => {
       const supabase = createClient()
-      const { data: aprovacoes } = await supabase
+      const { data } = await supabase
         .from('aprovacoes')
         .select()
         .eq('item_id', extrato_id)
         .eq('area', 'financeiro')
         .limit(1)
-
-      if (aprovacoes?.[0]?.proposta?.relatorio) {
-        setRelatorio(aprovacoes[0].proposta.relatorio)
-      }
+      if (data?.[0]?.proposta?.relatorio) setRelatorio(data[0].proposta.relatorio)
     }
-
     buscar()
   }, [extrato_id])
 
   return (
-    <div style={{ backgroundColor: 'white', borderRadius: '8px', padding: '20px' }}>
-      <div
-        style={{
-          fontFamily: 'monospace',
-          fontSize: '13px',
-          lineHeight: '1.6',
-          whiteSpace: 'pre-wrap',
-          color: '#333',
-        }}
-      >
-        {relatorio || 'Relatório será gerado após investigação...'}
+    <div className="card">
+      <div className="card-body">
+        <pre className="preview" style={{ maxHeight: 'none' }}>
+          {relatorio || 'Relatório será gerado após a investigação das divergências.'}
+        </pre>
       </div>
     </div>
   )

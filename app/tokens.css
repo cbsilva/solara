@@ -1,0 +1,285 @@
+/* ============================================================================
+   Solara OS — Design Tokens
+   Adaptado do sistema "argila" (Warm Clean): off-white quente, acento
+   terracota, bordas hairline, sombra minima. Modo claro (canonico) e escuro
+   por [data-theme="dark"] ou preferencia do SO.
+
+   Camadas:
+     1) PRIMITIVOS  — rampas cruas (nunca usar direto na UI)
+     2) SEMANTICOS  — mapeados por modo (usar SEMPRE estes)
+     3) ESCALARES   — tipografia, espaco, raio, sombra, transicao
+   ========================================================================== */
+
+/* ─── 1) PRIMITIVOS ─────────────────────────────────────────────────────── */
+:root {
+  /* neutros quentes (stone) — base do modo claro */
+  --stone-50:  #faf9f5;
+  --stone-100: #f4f2ec;
+  --stone-150: #eeebe3;
+  --stone-200: #e8e5dd;
+  --stone-300: #d8d4c8;
+  --stone-400: #b7b2a4;
+  --stone-500: #908b7e;
+  --stone-600: #6b6960;
+  --stone-700: #4a4842;
+  --stone-800: #2c2a26;
+  --stone-900: #1a1a18;
+
+  /* neutros quentes escuros (espresso) — base do modo escuro */
+  --esp-950: #141210;
+  --esp-900: #181613;
+  --esp-850: #1e1b17;
+  --esp-800: #221e1a;
+  --esp-750: #28231d;
+  --esp-700: #2f2922;
+  --esp-600: #38322b;
+  --esp-500: #4a4339;
+  --esp-400: #6e665a;
+  --esp-300: #a39c8e;
+  --esp-200: #c9c2b4;
+  --esp-100: #e6e1d6;
+  --esp-50:  #f5f2eb;
+
+  /* clay / terracota — acento da marca */
+  --clay-50:  #faf0eb;
+  --clay-100: #f2e5de;
+  --clay-200: #e6c5b6;
+  --clay-500: #cc785c;
+  --clay-600: #b5654a;
+  --clay-700: #9c543c;
+  --clay-bright:  #e0906f;
+  --clay-bright2: #eba088;
+  --clay-bright3: #f0ae96;
+
+  /* canais para transparencia */
+  --a-rgb: 204 120 92;
+  --a-bright-rgb: 224 144 111;
+  --ok-bright-rgb: 111 190 144;
+  --warn-bright-rgb: 224 169 74;
+  --err-bright-rgb: 224 121 107;
+  --info-bright-rgb: 107 155 214;
+  --sombra-rgb: 26 26 24;
+  --sombra-escura-rgb: 0 0 0;
+
+  /* estados quentes — nao neon */
+  --ok-100: #e3f0e7;  --ok-500: #3d8a5f;  --ok-600: #2f6e4c;
+  --warn-100: #f6ecd9; --warn-500: #b7791f; --warn-600: #946017;
+  --err-100: #f6e1de;  --err-500: #c2453a;  --err-600: #9f392f;
+  --info-100: #e4ecf6; --info-500: #3e6fb0;
+}
+
+/* ─── 2) SEMANTICOS — MODO CLARO (canonico) ─────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* superficies */
+  --bg:             var(--stone-50);
+  --bg-subtle:      var(--stone-100);
+  --surface:        #ffffff;
+  --surface-2:      var(--stone-50);
+  --surface-sunken: var(--stone-100);
+  --surface-nav:    var(--stone-100);
+  --overlay:        rgb(var(--sombra-rgb) / 0.40);
+
+  /* texto */
+  --text-strong:    var(--stone-900);
+  --text:           var(--stone-800);
+  --text-muted:     var(--stone-600);
+  --text-faint:     var(--stone-500);
+  --text-on-accent: #ffffff;
+
+  /* bordas */
+  --border:        var(--stone-200);
+  --border-strong: var(--stone-300);
+  --border-input:  var(--stone-300);
+
+  --skeleton:        var(--stone-200);
+  --skeleton-brilho: var(--stone-100);
+
+  /* acento */
+  --accent:            var(--clay-500);
+  --accent-hover:      var(--clay-600);
+  --accent-active:     var(--clay-700);
+  --accent-text:       var(--clay-700);
+  --accent-soft:       var(--clay-100);
+  --accent-soft-hover: var(--clay-50);
+  --accent-border:     var(--clay-200);
+  --ring:              rgb(var(--a-rgb) / 0.40);
+
+  /* semanticos */
+  --success:      var(--ok-500);
+  --success-text: var(--ok-600);
+  --success-soft: var(--ok-100);
+  --warning:      var(--warn-500);
+  --warning-text: var(--warn-600);
+  --warning-soft: var(--warn-100);
+  --danger:       var(--err-500);
+  --danger-text:  var(--err-600);
+  --danger-soft:  var(--err-100);
+  --text-on-danger: #ffffff;
+  --info:      var(--info-500);
+  --info-soft: var(--info-100);
+
+  /* sombras — quase imperceptiveis (elevacao por cor, nao por peso) */
+  --shadow-xs: 0 1px 2px rgb(var(--sombra-rgb) / 0.04);
+  --shadow-sm: 0 1px 3px rgb(var(--sombra-rgb) / 0.06), 0 1px 2px rgb(var(--sombra-rgb) / 0.04);
+  --shadow-md: 0 4px 12px rgb(var(--sombra-rgb) / 0.08);
+  --shadow-lg: 0 12px 32px rgb(var(--sombra-rgb) / 0.12);
+}
+
+/* ─── 2) SEMANTICOS — MODO ESCURO (derivado) ────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; }
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:             var(--esp-900);
+    --bg-subtle:      var(--esp-850);
+    --surface:        var(--esp-800);
+    --surface-2:      var(--esp-750);
+    --surface-sunken: var(--esp-950);
+    --surface-nav:    var(--esp-850);
+    --overlay:        rgb(var(--sombra-escura-rgb) / 0.55);
+
+    --text-strong:    var(--esp-50);
+    --text:           var(--esp-100);
+    --text-muted:     var(--esp-300);
+    --text-faint:     var(--esp-400);
+    --text-on-accent: #201a16;
+
+    --border:        var(--esp-600);
+    --border-strong: var(--esp-500);
+    --border-input:  var(--esp-500);
+
+    --skeleton:        var(--esp-700);
+    --skeleton-brilho: var(--esp-600);
+
+    --accent:            var(--clay-bright);
+    --accent-hover:      var(--clay-bright2);
+    --accent-active:     var(--clay-bright3);
+    --accent-text:       var(--clay-bright2);
+    --accent-soft:       rgb(var(--a-bright-rgb) / 0.14);
+    --accent-soft-hover: rgb(var(--a-bright-rgb) / 0.20);
+    --accent-border:     rgb(var(--a-bright-rgb) / 0.32);
+    --ring:              rgb(var(--a-bright-rgb) / 0.45);
+
+    --success:      rgb(var(--ok-bright-rgb));
+    --success-text: rgb(var(--ok-bright-rgb));
+    --success-soft: rgb(var(--ok-bright-rgb) / 0.15);
+    --warning:      rgb(var(--warn-bright-rgb));
+    --warning-text: rgb(var(--warn-bright-rgb));
+    --warning-soft: rgb(var(--warn-bright-rgb) / 0.15);
+    --danger:       rgb(var(--err-bright-rgb));
+    --danger-text:  rgb(var(--err-bright-rgb));
+    --danger-soft:  rgb(var(--err-bright-rgb) / 0.15);
+    --text-on-danger: #201a16;
+    --info:      rgb(var(--info-bright-rgb));
+    --info-soft: rgb(var(--info-bright-rgb) / 0.15);
+
+    --shadow-xs: 0 1px 2px rgb(var(--sombra-escura-rgb) / 0.30);
+    --shadow-sm: 0 1px 3px rgb(var(--sombra-escura-rgb) / 0.40), 0 1px 2px rgb(var(--sombra-escura-rgb) / 0.30);
+    --shadow-md: 0 4px 14px rgb(var(--sombra-escura-rgb) / 0.45);
+    --shadow-lg: 0 14px 38px rgb(var(--sombra-escura-rgb) / 0.55);
+  }
+}
+
+/* Override manual explicito — repete o bloco escuro (especificidade) */
+:root[data-theme="dark"] {
+  --bg:             var(--esp-900);
+  --bg-subtle:      var(--esp-850);
+  --surface:        var(--esp-800);
+  --surface-2:      var(--esp-750);
+  --surface-sunken: var(--esp-950);
+  --surface-nav:    var(--esp-850);
+  --overlay:        rgb(var(--sombra-escura-rgb) / 0.55);
+
+  --text-strong:    var(--esp-50);
+  --text:           var(--esp-100);
+  --text-muted:     var(--esp-300);
+  --text-faint:     var(--esp-400);
+  --text-on-accent: #201a16;
+
+  --border:        var(--esp-600);
+  --border-strong: var(--esp-500);
+  --border-input:  var(--esp-500);
+
+  --skeleton:        var(--esp-700);
+  --skeleton-brilho: var(--esp-600);
+
+  --accent:            var(--clay-bright);
+  --accent-hover:      var(--clay-bright2);
+  --accent-active:     var(--clay-bright3);
+  --accent-text:       var(--clay-bright2);
+  --accent-soft:       rgb(var(--a-bright-rgb) / 0.14);
+  --accent-soft-hover: rgb(var(--a-bright-rgb) / 0.20);
+  --accent-border:     rgb(var(--a-bright-rgb) / 0.32);
+  --ring:              rgb(var(--a-bright-rgb) / 0.45);
+
+  --success:      rgb(var(--ok-bright-rgb));
+  --success-text: rgb(var(--ok-bright-rgb));
+  --success-soft: rgb(var(--ok-bright-rgb) / 0.15);
+  --warning:      rgb(var(--warn-bright-rgb));
+  --warning-text: rgb(var(--warn-bright-rgb));
+  --warning-soft: rgb(var(--warn-bright-rgb) / 0.15);
+  --danger:       rgb(var(--err-bright-rgb));
+  --danger-text:  rgb(var(--err-bright-rgb));
+  --danger-soft:  rgb(var(--err-bright-rgb) / 0.15);
+  --text-on-danger: #201a16;
+  --info:      rgb(var(--info-bright-rgb));
+  --info-soft: rgb(var(--info-bright-rgb) / 0.15);
+
+  --shadow-xs: 0 1px 2px rgb(var(--sombra-escura-rgb) / 0.30);
+  --shadow-sm: 0 1px 3px rgb(var(--sombra-escura-rgb) / 0.40), 0 1px 2px rgb(var(--sombra-escura-rgb) / 0.30);
+  --shadow-md: 0 4px 14px rgb(var(--sombra-escura-rgb) / 0.45);
+  --shadow-lg: 0 14px 38px rgb(var(--sombra-escura-rgb) / 0.55);
+}
+
+/* ─── 3) ESCALARES — tipografia, espaco, raio, transicao ────────────────── */
+:root {
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "SF Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace;
+
+  /* tamanhos (rem, base 16px) */
+  --fs-display: 2rem;      /* 32 — hero/login       */
+  --fs-h1:      1.5rem;    /* 24 — titulo de pagina */
+  --fs-h2:      1.125rem;  /* 18 — titulo de secao  */
+  --fs-h3:      1rem;      /* 16 — subtitulo        */
+  --fs-body:    0.875rem;  /* 14 — corpo/UI         */
+  --fs-sm:      0.8125rem; /* 13 — dado de tabela   */
+  --fs-xs:      0.6875rem; /* 11 — label caixa-alta */
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.4;
+  --lh-base: 1.55;
+
+  --ls-tight: -0.01em;
+  --ls-caps: 0.06em;
+
+  /* espacamento (escala 4px) */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+
+  /* raios */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* transicoes */
+  --t-fast: 120ms ease;
+  --t: 180ms ease;
+  --t-slow: 280ms ease;
+
+  /* layout */
+  --nav-w: 232px;
+  --header-h: 56px;
+  --content-max: 1240px;
+}

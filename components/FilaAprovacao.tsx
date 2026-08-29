@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Icon } from '@/components/Icon'
 
 interface Aprovacao {
   id: string
@@ -16,99 +17,81 @@ interface Aprovacao {
   observacao: string | null
 }
 
-interface FilaAprovacaoProps {
-  area: string
-  usuarioId: string
+const BADGE: Record<string, string> = {
+  pendente: 'badge--warning',
+  aprovada: 'badge--success',
+  editada: 'badge--info',
+  rejeitada: 'badge--danger',
 }
 
-export function FilaAprovacao({ area, usuarioId }: FilaAprovacaoProps) {
+export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: string }) {
   const [itens, setItens] = useState<Aprovacao[]>([])
   const [selecionado, setSelecionado] = useState<string | null>(null)
-  const [propostEditada, setPropostaEditada] = useState<string>('')
-  const [observacao, setObservacao] = useState<string>('')
-  const [loading, setLoading] = useState(false)
-  const [modoPendente, setModoPendente] = useState(true)
+  const [propostaEditada, setPropostaEditada] = useState('')
+  const [observacao, setObservacao] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [soPendentes, setSoPendentes] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
 
-    const buscarItens = async () => {
-      const filtro = modoPendente ? 'pendente' : '*'
-      const query = supabase
-        .from('aprovacoes')
-        .select()
-        .eq('area', area)
-
-      if (modoPendente) {
-        query.eq('status', 'pendente')
-      }
-
+    const buscar = async () => {
+      let query = supabase.from('aprovacoes').select().eq('area', area)
+      if (soPendentes) query = query.eq('status', 'pendente')
       const { data } = await query.order('created_at', { ascending: true })
-
-      if (data) {
-        setItens(data as Aprovacao[])
-      }
+      if (data) setItens(data as Aprovacao[])
     }
 
-    buscarItens()
+    buscar()
 
-    // Realtime
-    const channel = supabase
+    const canal = supabase
       .channel(`aprovacoes-${area}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'aprovacoes',
-          filter: `area=eq.${area}`,
-        },
-        () => {
-          buscarItens()
-        }
+        { event: '*', schema: 'public', table: 'aprovacoes', filter: `area=eq.${area}` },
+        () => buscar()
       )
       .subscribe()
 
     return () => {
-      channel.unsubscribe()
+      canal.unsubscribe()
     }
-  }, [area, modoPendente])
+  }, [area, soPendentes])
 
-  const itemSelecionado = selecionado
-    ? itens.find((i) => i.id === selecionado)
-    : null
+  const item = selecionado ? itens.find((i) => i.id === selecionado) : null
 
-  const handleAprovar = async (id: string, editada = false) => {
-    setLoading(true)
+  const aprovar = async (id: string, editada = false) => {
+    setSalvando(true)
     const supabase = createClient()
-
-    const { error } = await supabase
-      .from('aprovacoes')
-      .update({
-        status: editada ? 'editada' : 'aprovada',
-        proposta: editada ? JSON.parse(propostEditada) : undefined,
-        decidido_por: usuarioId,
-        decidido_em: new Date().toISOString(),
-      })
-      .eq('id', id)
-
+    const patch: Record<string, any> = {
+      status: editada ? 'editada' : 'aprovada',
+      decidido_por: usuarioId,
+      decidido_em: new Date().toISOString(),
+    }
+    if (editada) {
+      try {
+        patch.proposta = JSON.parse(propostaEditada)
+      } catch {
+        alert('A proposta editada não é um JSON válido.')
+        setSalvando(false)
+        return
+      }
+    }
+    const { error } = await supabase.from('aprovacoes').update(patch).eq('id', id)
     if (!error) {
       setSelecionado(null)
       setPropostaEditada('')
     }
-
-    setLoading(false)
+    setSalvando(false)
   }
 
-  const handleRejeitar = async (id: string) => {
+  const rejeitar = async (id: string) => {
     if (!observacao.trim()) {
-      alert('Adicione uma observação ao rejeitar')
+      alert('Adicione uma observação ao rejeitar.')
       return
     }
-
-    setLoading(true)
+    setSalvando(true)
     const supabase = createClient()
-
     const { error } = await supabase
       .from('aprovacoes')
       .update({
@@ -118,197 +101,105 @@ export function FilaAprovacao({ area, usuarioId }: FilaAprovacaoProps) {
         observacao,
       })
       .eq('id', id)
-
     if (!error) {
       setSelecionado(null)
       setObservacao('')
     }
-
-    setLoading(false)
+    setSalvando(false)
   }
 
   return (
-    <div style={{ display: 'flex', gap: '20px', height: '100%' }}>
+    <div className="fila">
       {/* Lista */}
-      <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid #eee' }}>
-        <div style={{ padding: '10px', borderBottom: '1px solid #eee' }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={modoPendente}
-              onChange={(e) => setModoPendente(e.target.checked)}
-            />
-            {' '}Apenas pendentes
-          </label>
-        </div>
+      <div className="fila-lista">
+        <label className="ctl fila-filtro">
+          <input type="checkbox" checked={soPendentes} onChange={(e) => setSoPendentes(e.target.checked)} />
+          Apenas pendentes
+        </label>
 
-        {itens.map((item) => (
-          <div
-            key={item.id}
+        {itens.length === 0 && <p className="estado-vazio">Nenhum item</p>}
+
+        {itens.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            className={`fila-item ${selecionado === it.id ? 'is-selected' : ''}`}
             onClick={() => {
-              setSelecionado(item.id)
-              setPropostaEditada(JSON.stringify(item.proposta, null, 2))
+              setSelecionado(it.id)
+              setPropostaEditada(JSON.stringify(it.proposta, null, 2))
               setObservacao('')
             }}
-            style={{
-              padding: '12px',
-              borderBottom: '1px solid #eee',
-              cursor: 'pointer',
-              backgroundColor: selecionado === item.id ? '#e3f2fd' : 'white',
-              transition: 'background-color 0.2s',
-            }}
           >
-            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>
-              {item.titulo}
-            </div>
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {item.item_tipo} • {item.item_id}
-            </div>
-            <div
-              style={{
-                fontSize: '12px',
-                color: '#999',
-                marginTop: '4px',
-                padding: '4px 6px',
-                backgroundColor: '#f5f5f5',
-                borderRadius: '3px',
-                display: 'inline-block',
-              }}
-            >
-              {item.status}
-            </div>
-          </div>
+            <span className="fila-item-titulo">{it.titulo}</span>
+            <span className="fila-item-meta">{it.item_tipo} · {it.item_id}</span>
+            <span className={`badge ${BADGE[it.status] || 'badge--neutral'}`}>{it.status}</span>
+          </button>
         ))}
-
-        {itens.length === 0 && (
-          <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-            Nenhum item
-          </div>
-        )}
       </div>
 
       {/* Detalhe */}
-      {itemSelecionado && (
-        <div style={{ flex: 2, padding: '20px', overflowY: 'auto' }}>
-          <h3 style={{ marginTop: 0 }}>{itemSelecionado.titulo}</h3>
+      <div className="fila-detalhe">
+        {!item ? (
+          <p className="estado-vazio">Selecione um item para revisar.</p>
+        ) : (
+          <>
+            <h3>{item.titulo}</h3>
 
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>
-              Proposta
-            </label>
-            <textarea
-              value={propostEditada}
-              onChange={(e) => setPropostaEditada(e.target.value)}
-              style={{
-                width: '100%',
-                height: '200px',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-
-          {itemSelecionado.status === 'pendente' && (
-            <>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>
-                  Observação (para rejeitar)
-                </label>
-                <textarea
-                  value={observacao}
-                  onChange={(e) => setObservacao(e.target.value)}
-                  placeholder="Por favor, explique por que está rejeitando..."
-                  style={{
-                    width: '100%',
-                    height: '100px',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => handleAprovar(itemSelecionado.id, false)}
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    backgroundColor: '#4caf50',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: loading ? 'default' : 'pointer',
-                    opacity: loading ? 0.6 : 1,
-                  }}
-                >
-                  Aprovar
-                </button>
-                <button
-                  onClick={() => handleAprovar(itemSelecionado.id, true)}
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    backgroundColor: '#2196f3',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: loading ? 'default' : 'pointer',
-                    opacity: loading ? 0.6 : 1,
-                  }}
-                >
-                  Salvar e Aprovar
-                </button>
-                <button
-                  onClick={() => handleRejeitar(itemSelecionado.id)}
-                  disabled={loading}
-                  style={{
-                    flex: 1,
-                    padding: '10px',
-                    backgroundColor: '#d32f2f',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: loading ? 'default' : 'pointer',
-                    opacity: loading ? 0.6 : 1,
-                  }}
-                >
-                  Rejeitar
-                </button>
-              </div>
-            </>
-          )}
-
-          {itemSelecionado.status !== 'pendente' && (
-            <div style={{ padding: '10px', backgroundColor: '#f5f5f5', borderRadius: '4px' }}>
-              <div>
-                <strong>Status:</strong> {itemSelecionado.status}
-              </div>
-              {itemSelecionado.decidido_em && (
-                <div>
-                  <strong>Decidido em:</strong>{' '}
-                  {new Date(itemSelecionado.decidido_em).toLocaleString('pt-BR')}
-                </div>
-              )}
-              {itemSelecionado.observacao && (
-                <div style={{ marginTop: '10px' }}>
-                  <strong>Observação:</strong>
-                  <div style={{ whiteSpace: 'pre-wrap', marginTop: '5px' }}>
-                    {itemSelecionado.observacao}
-                  </div>
-                </div>
-              )}
+            <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+              <label>Proposta</label>
+              <textarea
+                className="input"
+                style={{ minHeight: 220, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}
+                value={propostaEditada}
+                onChange={(e) => setPropostaEditada(e.target.value)}
+              />
             </div>
-          )}
-        </div>
-      )}
+
+            {item.status === 'pendente' ? (
+              <>
+                <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+                  <label>Observação (obrigatória ao rejeitar)</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 90 }}
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    placeholder="Explique o motivo…"
+                  />
+                </div>
+
+                <div className="fila-acoes">
+                  <button className="btn btn--primary" disabled={salvando} onClick={() => aprovar(item.id, false)}>
+                    <Icon type="check" size="sm" />
+                    Aprovar
+                  </button>
+                  <button className="btn btn--secondary" disabled={salvando} onClick={() => aprovar(item.id, true)}>
+                    Salvar edição e aprovar
+                  </button>
+                  <button className="btn btn--danger" disabled={salvando} onClick={() => rejeitar(item.id)}>
+                    <Icon type="fechar" size="sm" />
+                    Rejeitar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="aviso" style={{ marginTop: 'var(--sp-4)' }}>
+                <div>
+                  <div><strong>Status:</strong> {item.status}</div>
+                  {item.decidido_em && (
+                    <div><strong>Decidido em:</strong> {new Date(item.decidido_em).toLocaleString('pt-BR')}</div>
+                  )}
+                  {item.observacao && (
+                    <div style={{ marginTop: 'var(--sp-2)', whiteSpace: 'pre-wrap' }}>
+                      <strong>Observação:</strong> {item.observacao}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

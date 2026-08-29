@@ -16,226 +16,100 @@ interface Execucao {
   erro: string | null
 }
 
-interface LinhaDoTempoProps {
-  item_id: string
+const BADGE: Record<string, string> = {
+  rodando: 'badge--info',
+  ok: 'badge--success',
+  erro: 'badge--danger',
 }
 
-export function LinhaDoTempo({ item_id }: LinhaDoTempoProps) {
+export function LinhaDoTempo({ item_id }: { item_id: string }) {
   const [execucoes, setExecucoes] = useState<Execucao[]>([])
   const [expandido, setExpandido] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
 
-    const buscarExecucoes = async () => {
+    const buscar = async () => {
       const { data } = await supabase
         .from('execucoes_agentes')
         .select()
         .eq('item_id', item_id)
         .order('inicio', { ascending: true })
-
-      if (data) {
-        setExecucoes(data as Execucao[])
-      }
+      if (data) setExecucoes(data as Execucao[])
     }
 
-    buscarExecucoes()
+    buscar()
 
-    // Realtime
-    const channel = supabase
+    const canal = supabase
       .channel(`timeline-${item_id}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'execucoes_agentes',
-          filter: `item_id=eq.${item_id}`,
-        },
-        () => {
-          buscarExecucoes()
-        }
+        { event: '*', schema: 'public', table: 'execucoes_agentes', filter: `item_id=eq.${item_id}` },
+        () => buscar()
       )
       .subscribe()
 
     return () => {
-      channel.unsubscribe()
+      canal.unsubscribe()
     }
   }, [item_id])
 
-  const getStatusCor = (status: string) => {
-    if (status === 'rodando') return '#2196f3'
-    if (status === 'ok') return '#4caf50'
-    if (status === 'erro') return '#d32f2f'
-    return '#999'
-  }
-
-  const getTempoTexto = (exec: Execucao) => {
-    if (!exec.fim || !exec.inicio) return ''
-    const ms = new Date(exec.fim).getTime() - new Date(exec.inicio).getTime()
-    const segundos = Math.round(ms / 1000)
-    return `${segundos}s`
+  const tempo = (e: Execucao) => {
+    if (!e.fim || !e.inicio) return null
+    return `${Math.round((new Date(e.fim).getTime() - new Date(e.inicio).getTime()) / 1000)}s`
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h3 style={{ marginTop: 0 }}>Execuções</h3>
+    <div className="linha-tempo">
+      <p className="rotulo-mini">Execuções</p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {execucoes.map((exec, idx) => (
-          <div key={exec.id}>
-            {/* Linha */}
-            <div
-              onClick={() =>
-                setExpandido(expandido === exec.id ? null : exec.id)
-              }
-              style={{
-                display: 'flex',
-                gap: '12px',
-                padding: '12px',
-                border: `2px solid ${getStatusCor(exec.status)}`,
-                borderRadius: '6px',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s',
-                backgroundColor: expandido === exec.id ? '#f5f5f5' : 'white',
-              }}
-            >
-              {/* Número */}
-              <div
-                style={{
-                  minWidth: '30px',
-                  fontWeight: 'bold',
-                  color: '#999',
-                }}
-              >
-                {idx + 1}
-              </div>
+      {execucoes.length === 0 && <p className="estado-vazio">Nenhuma execução</p>}
 
-              {/* Info principal */}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 'bold' }}>
-                  {exec.agente}{' '}
-                  <span
-                    style={{
-                      fontSize: '12px',
-                      color: 'white',
-                      backgroundColor: getStatusCor(exec.status),
-                      padding: '2px 6px',
-                      borderRadius: '3px',
-                      marginLeft: '8px',
-                    }}
-                  >
-                    {exec.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+      {execucoes.map((exec, idx) => {
+        const aberto = expandido === exec.id
+        const tokens = (exec.tokens_entrada || 0) + (exec.tokens_saida || 0)
+        return (
+          <div key={exec.id} className="lt-item">
+            <button type="button" className="lt-linha" onClick={() => setExpandido(aberto ? null : exec.id)}>
+              <span className="lt-num">{idx + 1}</span>
+              <span className="lt-info">
+                <span className="lt-agente">
+                  {exec.agente}
+                  <span className={`badge ${BADGE[exec.status] || 'badge--neutral'}`}>{exec.status}</span>
+                </span>
+                <span className="lt-meta">
                   {new Date(exec.inicio).toLocaleTimeString('pt-BR')}
-                  {getTempoTexto(exec) && ` • ${getTempoTexto(exec)}`}
-                  {exec.tokens_entrada && (
-                    <>
-                      {' '}
-                      •{' '}
-                      {(exec.tokens_entrada || 0) +
-                        (exec.tokens_saida || 0)}{' '}
-                      tokens
-                    </>
-                  )}
-                </div>
-              </div>
+                  {tempo(exec) && ` · ${tempo(exec)}`}
+                  {tokens > 0 && ` · ${tokens} tokens`}
+                </span>
+              </span>
+              <span className="lt-chevron">{aberto ? '▾' : '▸'}</span>
+            </button>
 
-              {/* Seta */}
-              <div
-                style={{
-                  fontSize: '12px',
-                  color: '#999',
-                  alignSelf: 'center',
-                }}
-              >
-                {expandido === exec.id ? '▼' : '▶'}
-              </div>
-            </div>
-
-            {/* Expandido */}
-            {expandido === exec.id && (
-              <div
-                style={{
-                  marginTop: '8px',
-                  padding: '12px',
-                  backgroundColor: '#f9f9f9',
-                  borderRadius: '6px',
-                  marginLeft: '8px',
-                  borderLeft: `4px solid ${getStatusCor(exec.status)}`,
-                }}
-              >
+            {aberto && (
+              <div className="lt-detalhe">
                 {exec.entrada && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                      Entrada
-                    </div>
-                    <pre
-                      style={{
-                        backgroundColor: 'white',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        overflow: 'auto',
-                        fontSize: '12px',
-                        margin: 0,
-                      }}
-                    >
-                      {JSON.stringify(exec.entrada, null, 2)}
-                    </pre>
-                  </div>
+                  <>
+                    <p className="rotulo-mini">Entrada</p>
+                    <pre className="preview">{JSON.stringify(exec.entrada, null, 2)}</pre>
+                  </>
                 )}
-
                 {exec.saida && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>
-                      Saída
-                    </div>
-                    <pre
-                      style={{
-                        backgroundColor: 'white',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        overflow: 'auto',
-                        fontSize: '12px',
-                        margin: 0,
-                      }}
-                    >
-                      {JSON.stringify(exec.saida, null, 2)}
-                    </pre>
-                  </div>
+                  <>
+                    <p className="rotulo-mini">Saída</p>
+                    <pre className="preview">{JSON.stringify(exec.saida, null, 2)}</pre>
+                  </>
                 )}
-
                 {exec.erro && (
-                  <div>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#d32f2f' }}>
-                      Erro
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: '#ffebee',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        color: '#c62828',
-                        fontSize: '12px',
-                      }}
-                    >
-                      {exec.erro}
-                    </div>
+                  <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-2)' }}>
+                    <span>{exec.erro}</span>
                   </div>
                 )}
               </div>
             )}
           </div>
-        ))}
-
-        {execucoes.length === 0 && (
-          <div style={{ textAlign: 'center', color: '#999', padding: '20px' }}>
-            Nenhuma execução
-          </div>
-        )}
-      </div>
+        )
+      })}
     </div>
   )
 }
