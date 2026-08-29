@@ -61,6 +61,7 @@ dentro de `@media`/`[data-theme]` — o token claro é a fonte.
 - ✅ `/login` — split editorial + formulário
 - ✅ `/` — grade de áreas
 - ✅ `/vendas` — cabeçalho de tela, abas, kanban, drawer com linha do tempo
+- ✅ `/rh` — mesmo padrão de `/vendas`: abas (Faixas salariais / Colaboradores / Aprovações), kanban de faixas, tabela de colaboradores, drawer
 - ✅ `/admin` — formulário + tabela
 - ✅ `/financeiro` — abas, dropzones, antes/depois, cards de resultado, relatório
 - ✅ `components/Organograma`, `FilaAprovacao`, `LinhaDoTempo`

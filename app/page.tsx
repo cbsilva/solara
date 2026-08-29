@@ -20,7 +20,7 @@ const AREAS: {
 }[] = [
   { id: 'vendas', nome: 'Vendas', descricao: 'Processar pedidos de orçamento com triagem, pesquisa e redação.', icone: 'pedidos', ativo: true },
   { id: 'financeiro', nome: 'Financeiro', descricao: 'Conciliar extratos bancários e investigar divergências.', icone: 'cotacoes', ativo: true },
-  { id: 'rh', nome: 'RH', descricao: 'Em breve.', icone: 'usuarios', ativo: false },
+  { id: 'rh', nome: 'RH', descricao: 'Cadastro de colaboradores e aprovação de faixas salariais.', icone: 'usuarios', ativo: true },
   { id: 'juridico', nome: 'Jurídico', descricao: 'Em breve.', icone: 'cotacoes', ativo: false },
   { id: 'operacoes', nome: 'Operações', descricao: 'Em breve.', icone: 'config', ativo: false },
 ]

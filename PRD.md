@@ -12,7 +12,9 @@ A Solara Distribuidora vende peças e insumos industriais (fixadores, vedações
 
 **Em Financeiro**, o Rafael fecha o mês batendo o extrato do banco com os títulos a receber, linha por linha, numa planilha. Leva dois dias. O que ele não consegue explicar (um PIX sem identificação, um valor que não bate) fica em aberto ou vai errado para o balanço.
 
-Nos dois casos, ninguém sabe depois quem respondeu o quê, com base em que informação, nem quanto tempo levou.
+**Em Recursos Humanos**, a maior parte das demandas chega de forma desestruturada: mensagens, e-mails, conversas com gestores e solicitações dos colaboradores. A pessoa do RH precisa interpretar o pedido, buscar informações em diferentes lugares, consultar políticas internas, conferir regras e então responder ou executar o processo. O problema não é apenas responder perguntas: é entender a solicitação, verificar se ela pode ser atendida e conduzir o processo corretamente.
+
+Nos três casos, ninguém sabe depois quem respondeu o quê, com base em que informação, nem quanto tempo levou.
 
 ## 3. O que queremos
 
@@ -33,19 +35,26 @@ Um sistema próprio da Solara, o **Solara OS**, onde agentes de IA fazem a parte
 - Cada explicação vai para a mesma fila de aprovação. O Rafael aceita, corrige ou rejeita.
 - Se a empresa não tiver ERP, o Rafael pode subir também a planilha de títulos.
 
-### 3.3 Para toda a empresa
+### 3.3 Recursos Humanos
+- Uma solicitação de RH entra no sistema (importada do sistema de RH, recebida por e-mail ou digitada por um gestor ou colaborador).
+- O sistema entende a solicitação, consulta os dados do colaborador, políticas internas e informações necessárias para analisar o pedido.
+- Uma verificação automática garante que a resposta ou ação esteja de acordo com as regras da empresa: férias sem saldo, alteração salarial fora da faixa, contratação sem vaga aprovada, benefício não elegível ou informação cadastral inconsistente.
+- A resposta ou ação proposta vai para uma fila. O responsável pelo RH aprova, edita, solicita informação adicional ou rejeita. **Nenhuma decisão crítica de RH é executada sem uma pessoa aprovar.**
+- Solicitações que não são demandas de RH (spam, mensagens sem contexto ou assuntos fora do escopo) são identificadas e não seguem o fluxo normal.
+
+### 3.4 Para toda a empresa
 - Login por e-mail e senha. Um administrador cadastra quem entra e em quais áreas.
 - Toda ação de um agente fica registrada: qual agente, o que recebeu, o que devolveu, quanto tempo levou, quanto custou, quem o chamou.
 - Uma tela mostra, em tempo real, qual agente está trabalhando em cada pedido.
-- Novas áreas (RH, Jurídico, Operações) devem poder ser adicionadas reaproveitando o que já existe.
+- Novas áreas (Jurídico, Operações) devem poder ser adicionadas reaproveitando o que já existe.
 
 ## 4. O que fica fora desta versão
 
-- Receber e-mail automaticamente. Pedidos entram do ERP ou pelo sistema.
-- Enviar a resposta ao cliente. A Marcela copia a resposta aprovada.
-- Integração automática com o ERP. A carga é por CSV.
+- Receber e-mail automaticamente. Pedidos e solicitações entram do ERP, do sistema de RH ou pelo sistema.
+- Enviar a resposta ao cliente ou executar a ação no sistema de RH. A pessoa copia a resposta aprovada ou executa a ação aprovada.
+- Integração automática com o ERP ou com o sistema de RH. A carga é por CSV.
 - Login por Google ou outro provedor.
-- Qualquer área além de Vendas e Financeiro.
+- Qualquer área além de Vendas, Financeiro e Recursos Humanos.
 
 ## 5. Como saber se deu certo
 
@@ -53,7 +62,8 @@ Um sistema próprio da Solara, o **Solara OS**, onde agentes de IA fazem a parte
 |---|---|
 | 10 min por orçamento | 1 min (o tempo de ler e aprovar) |
 | 2 dias de fechamento | minutos, com cada divergência explicada |
-| respostas sem revisão | zero: toda resposta passa por uma pessoa |
+| solicitação de RH resolvida no improviso, sem registro de política | proposta pronta com a regra citada; a pessoa lê e aprova |
+| respostas sem revisão | zero: toda resposta ou ação passa por uma pessoa |
 | nenhum registro | toda execução rastreável: quem, o quê, quando, quanto custou |
 
 ## 6. Princípios

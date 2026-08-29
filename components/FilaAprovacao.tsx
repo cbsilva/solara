@@ -60,7 +60,29 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
 
   const item = selecionado ? itens.find((i) => i.id === selecionado) : null
 
+  // Reflete a decisão no item de origem (SPEC 4.3 / 6.4). 1:1 apenas para
+  // `pedido` e `faixa`; `divergencia` fica a cargo do fluxo de Financeiro.
+  const aplicarDecisaoNoItem = async (it: Aprovacao, decisao: 'aprovada' | 'rejeitada') => {
+    const supabase = createClient()
+    if (it.item_tipo === 'pedido') {
+      await supabase
+        .from('pedidos_orcamento')
+        .update({ status: decisao === 'aprovada' ? 'respondido' : 'rejeitado' })
+        .eq('cod_pedido', it.item_id)
+    } else if (it.item_tipo === 'faixa') {
+      await supabase
+        .from('faixas_salariais')
+        .update(
+          decisao === 'aprovada'
+            ? { status: 'aprovada', inicio: new Date().toISOString().slice(0, 10) }
+            : { status: 'rejeitada' }
+        )
+        .eq('id_faixa', it.item_id)
+    }
+  }
+
   const aprovar = async (id: string, editada = false) => {
+    if (!item) return
     setSalvando(true)
     const supabase = createClient()
     const patch: Record<string, any> = {
@@ -79,6 +101,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     }
     const { error } = await supabase.from('aprovacoes').update(patch).eq('id', id)
     if (!error) {
+      await aplicarDecisaoNoItem(item, 'aprovada')
       setSelecionado(null)
       setPropostaEditada('')
     }
@@ -86,6 +109,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   }
 
   const rejeitar = async (id: string) => {
+    if (!item) return
     if (!observacao.trim()) {
       alert('Adicione uma observação ao rejeitar.')
       return
@@ -102,6 +126,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       })
       .eq('id', id)
     if (!error) {
+      await aplicarDecisaoNoItem(item, 'rejeitada')
       setSelecionado(null)
       setObservacao('')
     }

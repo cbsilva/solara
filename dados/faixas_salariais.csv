@@ -1,0 +1,12 @@
+id_faixa,id_colaborador,valor,inicio,status,justificativa
+FX001,COL001,4200.00,2024-01-15,aprovada,Contratacao
+FX002,COL002,5600.00,2023-11-01,aprovada,Contratacao
+FX003,COL003,6900.00,2024-02-01,aprovada,Contratacao
+FX004,COL004,3800.00,2024-05-01,aprovada,Contratacao
+FX005,COL005,8200.00,2023-08-01,aprovada,Contratacao
+FX006,COL006,4950.00,2024-03-01,aprovada,Contratacao
+FX007,COL007,5300.00,2024-06-01,aprovada,Contratacao
+FX008,COL008,7100.00,2023-12-01,aprovada,Contratacao
+FX009,COL001,4620.00,,nova,Promocao para analista pleno apos avaliacao trimestral
+FX010,COL003,8500.00,,nova,Equiparacao com proposta externa; retencao urgente
+FX011,COL006,5100.00,,nova,Reajuste anual de merito

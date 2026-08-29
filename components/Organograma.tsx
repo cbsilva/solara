@@ -17,6 +17,7 @@ interface Execucao {
 const AGENTES_POR_AREA: Record<string, string[]> = {
   vendas: ['triador', 'pesquisador', 'redator', 'revisor'],
   financeiro: ['investigador', 'consolidador', 'revisor'],
+  rh: ['triador', 'pesquisador', 'redator', 'revisor'],
 }
 
 export function Organograma({ area, item_id }: { area: string; item_id: string }) {

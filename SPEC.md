@@ -200,5 +200,46 @@ Aprovar: divergência `resolvida`, título(s) recebem status conforme a ação (
 
 ---
 
-## 6. Fora do escopo desta versão
-E-mail de entrada ou saída; OAuth; integração automática com ERP; orquestrador decidido pelo modelo (tool use); áreas além de Vendas e Financeiro.
+## 6. Recursos Humanos
+
+Rota: `/rh`. Só para usuários com `rh` em `perfis.areas`.
+
+### 6.1 Tabelas
+As duas tabelas são importadas dos CSVs de `dados/` (ver `sql/rh.sql`). Não recriar nem alterar colunas.
+`colaboradores`: `id_colaborador` (ex.: COL001), `nome`, `email`, `telefone`, `criado_em`.
+`faixas_salariais`: `id_faixa` (ex.: FX001), `id_colaborador`, `valor`, `inicio` (vigência, null enquanto não aprovada), `status` (`nova`, `processando`, `aguardando_aprovacao`, `aprovada`, `rejeitada`), `justificativa`, `criado_em`.
+O salário atual de um colaborador é a última faixa com `status = aprovada`.
+
+### 6.2 Tela
+Duas abas:
+- **Colaboradores**: tabela de `colaboradores` (id, nome, e-mail, telefone). Botão **Novo colaborador** abre um formulário (nome, e-mail, telefone) e salva com `id_colaborador` sequencial (COL009, COL010…). Sem agentes — cadastro puro.
+- **Faixas salariais**: em cima o `Organograma` da faixa selecionada (ou vazio). Embaixo, kanban de `faixas_salariais` com colunas por `status`: `nova`, `processando`, `aguardando_aprovacao`, `aprovada`, `rejeitada`. Cartão mostra id_faixa, nome do colaborador (join com `colaboradores`), valor pretendido, salário atual e as primeiras 80 letras da justificativa. Cartões em `nova` têm o botão **Processar**. Botão **Nova faixa** abre um formulário: colaborador (select de `colaboradores`), valor pretendido, justificativa. Salva em `faixas_salariais` com `status = nova` e `id_faixa` sequencial.
+- Aba **Aprovações** mostra `FilaAprovacao` da área rh.
+- Clicar num cartão abre um painel lateral com `LinhaDoTempo`.
+
+O kanban se atualiza por Realtime na tabela `faixas_salariais`.
+
+`Organograma` desenha, para `rh`: triador, pesquisador, redator, revisor (mesmo conjunto de Vendas).
+
+### 6.3 Rota de API `POST /api/rh/processar` (body: `{ id_faixa }`)
+`export const maxDuration = 60`. Executa o orquestrador de RH (`lib/orquestradores/rh.ts`):
+
+1. Atualiza a faixa para `processando`. Cria a execução raiz `orquestrador`.
+2. **Triador**: entrada `{ justificativa, colaborador: {id_colaborador, nome}, valor_pretendido }`. Saída `{ tipo, resumo_pedido, observacoes }`. `tipo` é um de `alteracao_salarial`, `fora_do_rh`, `spam`, `outro`.
+   - Se `tipo` não for `alteracao_salarial`: cria item em `aprovacoes` com `titulo = "Não é RH: <tipo>"` e a saída do Triador como proposta; faixa vai para `aguardando_aprovacao`; encerra.
+3. **Pesquisador**: consultas ao banco em código, não pelo modelo:
+   - colaborador: linha de `colaboradores`.
+   - faixa atual: última faixa do mesmo colaborador com `status = aprovada` (valor e início).
+   Calcula `variacao_pct = (valor_pretendido - valor_atual) / valor_atual * 100`. Em seguida chama o agente `pesquisador` com `{ colaborador, valor_atual, valor_pretendido, variacao_pct, faixas_anteriores }` para montar o contexto: `{ valor_atual, valor_pretendido, variacao_pct, tempo_desde_ultima_faixa_meses, observacoes }`.
+4. **Redator**: entrada `{ triagem, contexto, colaborador }`. Saída `{ resposta, resumo }`. A resposta é a justificativa formal da alteração que o RH registraria.
+5. **Revisor**: entrada `{ resposta, contexto, regras }` onde `regras` vem do prompt (teto de `variacao_pct` permitido sem exceção). Saída `{ aprovado, motivos: [] }`.
+   - Se `aprovado = false`: chama o Redator de novo com `{ ...entrada_anterior, ajustes: motivos }` e o Revisor de novo. No máximo 2 voltas. Se ainda reprovar, segue para a fila com os motivos anexados.
+6. Cria item em `aprovacoes` com `item_tipo = faixa`, `titulo = "<colaborador> · <resumo>"`, `proposta = { resposta, triagem, contexto, revisao }`. Faixa vai para `aguardando_aprovacao`. Fecha a execução raiz.
+
+### 6.4 Decisão na fila
+Aprovar ou editar: faixa vai para `aprovada` e recebe `inicio = hoje` (a vigência). Rejeitar: faixa vai para `rejeitada`. Ambas gravam `decidido_por` e `decidido_em`.
+
+---
+
+## 7. Fora do escopo desta versão
+E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro e Recursos Humanos.

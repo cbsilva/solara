@@ -1,9 +1,10 @@
 # Solara OS
 
 Sistema de gestão da Solara Distribuidora. Agentes de IA fazem a parte repetitiva
-de **Vendas** (pedidos de orçamento) e **Financeiro** (conciliação bancária); as
-pessoas aprovam. Nenhuma decisão de negócio sai do sistema sem aprovação humana,
-e toda execução de agente fica registrada (quem, o quê, quando, quanto custou).
+de **Vendas** (pedidos de orçamento), **Financeiro** (conciliação bancária) e
+**RH** (alteração de faixa salarial); as pessoas aprovam. Nenhuma decisão de
+negócio sai do sistema sem aprovação humana, e toda execução de agente fica
+registrada (quem, o quê, quando, quanto custou).
 
 ## Stack
 
@@ -25,10 +26,12 @@ solara-os/
 │   ├── admin/page.tsx             # /admin — CRUD de usuários (só admin)
 │   ├── vendas/page.tsx            # /vendas — kanban de pedidos
 │   ├── financeiro/page.tsx        # /financeiro — importar e conciliar extrato
+│   ├── rh/page.tsx                # /rh — colaboradores + kanban de faixas salariais
 │   └── api/
 │       ├── admin/criar-usuario/route.ts
 │       ├── vendas/processar/route.ts        # maxDuration = 60
-│       └── financeiro/conciliar/route.ts    # maxDuration = 60
+│       ├── financeiro/conciliar/route.ts    # maxDuration = 60
+│       └── rh/processar/route.ts            # maxDuration = 60
 ├── components/
 │   ├── Header.tsx                 # .topo — cabeçalho fixo, marca clicável, tema
 │   ├── ThemeToggle.tsx            # alterna claro/escuro (data-theme + localStorage)
@@ -39,12 +42,16 @@ solara-os/
 ├── lib/
 │   ├── supabase/{client,server}.ts
 │   ├── agente.ts                  # ÚNICA porta para a API Anthropic
-│   ├── orquestradores/{vendas,financeiro}.ts   # orquestração é código comum
-│   └── financeiro/{limpar,casar}.ts            # limpeza e casamento determinísticos
+│   ├── orquestradores/{vendas,financeiro,rh}.ts  # orquestração é código comum
+│   └── financeiro/{limpar,casar}.ts             # limpeza e casamento determinísticos
 ├── prompts/
 │   ├── vendas/{triador,pesquisador,redator,revisor}.md
-│   └── financeiro/{investigador,consolidador,revisor}.md
-├── sql/criar_tabelas.sql         # tabelas do Motor + Financeiro (com Realtime)
+│   ├── financeiro/{investigador,consolidador,revisor}.md
+│   └── rh/{triador,pesquisador,redator,revisor}.md
+├── sql/
+│   ├── criar_tabelas.sql         # tabelas do Motor + Financeiro (com Realtime)
+│   └── rh.sql                    # tabelas colaboradores + faixas_salariais
+├── dados/                        # CSVs de carga (ERP + colaboradores/faixas do RH)
 ├── PRD.md · SPEC.md · SPEC-DESIGN.md · DESIGN.md · CLAUDE.md
 ```
 
@@ -61,16 +68,20 @@ solara-os/
    - `SUPABASE_SECRET_KEY` (service role — só no servidor)
    - `ANTHROPIC_API_KEY`
 
-3. **Tabelas** — no [painel Supabase](https://supabase.com/dashboard) → SQL Editor,
-   execute `sql/criar_tabelas.sql`. Cria `execucoes_agentes`, `aprovacoes`,
-   `extratos_importados`, `lancamentos`, `divergencias`, todas com Realtime.
+3. **Tabelas** — no [painel Supabase](https://supabase.com/dashboard) → SQL Editor:
+   - `sql/criar_tabelas.sql` — `execucoes_agentes`, `aprovacoes`,
+     `extratos_importados`, `lancamentos`, `divergencias` (todas com Realtime).
+   - `sql/rh.sql` — `colaboradores` e `faixas_salariais`; depois importe
+     `dados/colaboradores.csv` e `dados/faixas_salariais.csv` pelo Table Editor
+     (para `faixas_salariais`, ligue "Use empty string as NULL" por causa de `inicio`).
+
    As tabelas do ERP (`clientes`, `produtos`, `pedidos_orcamento`,
    `titulos_receber`, `extrato_bancario`) já existem, importadas de `dados/`.
 
 4. **Primeiro usuário (admin)** — crie em Authentication → Users e depois:
    ```sql
    INSERT INTO perfis (id, email, nome, papel, areas)
-   SELECT id, email, email, 'admin', ARRAY['vendas','financeiro']
+   SELECT id, email, email, 'admin', ARRAY['vendas','financeiro','rh']
    FROM auth.users WHERE email = 'voce@exemplo.com';
    ```
 
@@ -96,14 +107,27 @@ bate vira divergência. **Investigar** dispara `POST /api/financeiro/conciliar`:
 **Investigador** (um por divergência, em paralelo) → **Consolidador** (relatório)
 → **Revisor**. Cada hipótese vai para a fila. O Rafael aceita, corrige ou rejeita.
 
-### Motor (comum às duas áreas)
+### RH (`/rh`)
+Duas frentes. **Colaboradores**: cadastro simples (nome, e-mail, telefone), sem
+agentes. **Faixas salariais**: kanban de `faixas_salariais` (`nova → processando →
+aguardando_aprovacao → aprovada / rejeitada`). **Processar** dispara
+`POST /api/rh/processar`: **Triador** (é alteração salarial?) → **Pesquisador**
+(busca o colaborador e a última faixa aprovada, calcula a variação %) → **Redator**
+(justificativa formal) → **Revisor** (teto de variação e intervalo mínimo, até 2
+voltas). A proposta vai para a fila; aprovar grava `status = aprovada` e
+`inicio = hoje` (a vigência). O salário atual de um colaborador é a última faixa
+aprovada.
+
+### Motor (comum às três áreas)
 - `lib/agente.ts` — única função que chama a Anthropic. Grava em
   `execucoes_agentes` no início (`rodando`) e no fim (`ok`/`erro`), com entrada,
   saída, tokens e tempo. O system prompt vem de `prompts/<area>/<papel>.md`.
 - `components/Organograma` — assina `execucoes_agentes` por Realtime e desenha os
   agentes: cinza (sem execução), pulsando (`rodando`), sólido (`ok`, com tempo e
   tokens), vermelho (`erro`).
-- `components/FilaAprovacao` e `LinhaDoTempo` — mesmos componentes nas duas áreas.
+- `components/FilaAprovacao` e `LinhaDoTempo` — mesmos componentes nas três áreas.
+  Ao decidir, a fila reflete no item de origem: pedido → `respondido`/`rejeitado`,
+  faixa → `aprovada`/`rejeitada`.
 
 ## Design
 
@@ -127,7 +151,7 @@ npm run lint
 | Arquivo | Conteúdo |
 |---|---|
 | [PRD.md](./PRD.md) | O problema e o resultado esperado, para pessoas |
-| [SPEC.md](./SPEC.md) | Especificação técnica: Fundação, Casca, Motor, Vendas, Financeiro |
+| [SPEC.md](./SPEC.md) | Especificação técnica: Fundação, Casca, Motor, Vendas, Financeiro, Recursos Humanos |
 | [SPEC-DESIGN.md](./SPEC-DESIGN.md) | Especificação de design: princípios, tokens, componentes, telas |
 | [DESIGN.md](./DESIGN.md) | Referência rápida do design system |
 | [CLAUDE.md](./CLAUDE.md) | Regras da casa (idioma, stack, convenções) |
@@ -139,5 +163,5 @@ Conecte o repositório, configure as 4 variáveis de ambiente no painel e o depl
 
 ---
 
-**Status:** Fundação, Casca, Motor, Vendas e Financeiro implementados. Interface
-migrada para o design system "argila", com tema claro/escuro.
+**Status:** Fundação, Casca, Motor, Vendas, Financeiro e RH implementados.
+Interface no design system "argila", com tema claro/escuro.
