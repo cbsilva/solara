@@ -1,0 +1,212 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Cores do sistema */
+:root {
+  --primary: #1e40af;
+  --primary-light: #3b82f6;
+  --primary-dark: #1e3a8a;
+  --secondary: #10b981;
+  --secondary-light: #34d399;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --success: #10b981;
+  --gray-light: #f9fafb;
+  --gray-border: #e5e7eb;
+  --gray-text: #6b7280;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  background-color: #f3f4f6;
+  color: #1f2937;
+  line-height: 1.5;
+}
+
+/* Animações */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s infinite;
+}
+
+/* Componentes */
+.card {
+  @apply bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200;
+}
+
+.card-hover {
+  @apply cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-200;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-white text-blue-600 border border-blue-600 rounded-lg font-medium hover:bg-blue-50 active:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200;
+}
+
+.btn-danger {
+  @apply px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 active:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200;
+}
+
+.btn-success {
+  @apply px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 active:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200;
+}
+
+.input-field {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200;
+}
+
+.select-field {
+  @apply input-field cursor-pointer;
+}
+
+.label {
+  @apply block text-sm font-medium text-gray-700 mb-2;
+}
+
+/* Header */
+.header {
+  @apply sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm;
+}
+
+.header-container {
+  @apply max-w-7xl mx-auto px-4 py-4 flex items-center justify-between;
+}
+
+/* Sidebar */
+.sidebar {
+  @apply fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 overflow-y-auto transition-transform duration-300 ease-out;
+}
+
+.sidebar.mobile-hidden {
+  @apply -translate-x-full;
+}
+
+/* Main layout */
+.app-layout {
+  @apply flex h-screen bg-gray-50;
+}
+
+.app-main {
+  @apply flex-1 flex flex-col overflow-hidden;
+}
+
+.app-content {
+  @apply flex-1 overflow-auto p-4 md:p-6;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 768px) {
+  .header-container {
+    @apply px-3 py-3;
+  }
+
+  .app-content {
+    @apply p-3;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Utility classes */
+.text-xs {
+  font-size: 0.75rem;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+}
+
+.text-base {
+  font-size: 1rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+.text-xl {
+  font-size: 1.25rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.font-bold {
+  font-weight: 700;
+}
