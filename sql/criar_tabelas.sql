@@ -50,3 +50,62 @@ CREATE INDEX idx_aprovacoes_item_id ON aprovacoes(item_id);
 
 -- Habilitar Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE aprovacoes;
+
+---
+
+-- Tabela: extratos_importados
+CREATE TABLE extratos_importados (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nome_arquivo TEXT NOT NULL,
+  importado_em TIMESTAMPTZ DEFAULT now(),
+  importado_por UUID REFERENCES auth.users(id),
+  total_linhas INT,
+  total_creditos DECIMAL(15,2),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_extratos_importado_por ON extratos_importados(importado_por);
+
+---
+
+-- Tabela: lancamentos
+CREATE TABLE lancamentos (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  extrato_id UUID NOT NULL REFERENCES extratos_importados(id) ON DELETE CASCADE,
+  data DATE NOT NULL,
+  descricao TEXT,
+  valor DECIMAL(15,2) NOT NULL,
+  tipo TEXT NOT NULL,
+  cod_titulo_casado TEXT,
+  situacao TEXT NOT NULL DEFAULT 'divergente',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_lancamentos_extrato_id ON lancamentos(extrato_id);
+CREATE INDEX idx_lancamentos_data ON lancamentos(data);
+CREATE INDEX idx_lancamentos_situacao ON lancamentos(situacao);
+
+---
+
+-- Tabela: divergencias
+CREATE TABLE divergencias (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  extrato_id UUID NOT NULL REFERENCES extratos_importados(id) ON DELETE CASCADE,
+  tipo_inicial TEXT,
+  lancamento_id UUID REFERENCES lancamentos(id),
+  cod_titulo TEXT,
+  valor_lancamento DECIMAL(15,2),
+  valor_titulo DECIMAL(15,2),
+  status TEXT NOT NULL DEFAULT 'nova',
+  hipotese JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_divergencias_extrato_id ON divergencias(extrato_id);
+CREATE INDEX idx_divergencias_status ON divergencias(status);
+CREATE INDEX idx_divergencias_cod_titulo ON divergencias(cod_titulo);
+
+-- Habilitar Realtime para Financeiro
+ALTER PUBLICATION supabase_realtime ADD TABLE extratos_importados;
+ALTER PUBLICATION supabase_realtime ADD TABLE lancamentos;
+ALTER PUBLICATION supabase_realtime ADD TABLE divergencias;
