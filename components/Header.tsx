@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Icon } from '@/components/Icon'
 
 interface HeaderProps {
   titulo: string
@@ -26,8 +27,8 @@ export function Header({ titulo, usuarioEmail, mostraAdmin, mostraLogout }: Head
         <div className="flex items-center justify-between">
           {/* Logo e Título */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">S</span>
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+              <Icon type="logo" size="lg" className="text-white" />
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Solara OS</h1>
@@ -53,9 +54,9 @@ export function Header({ titulo, usuarioEmail, mostraAdmin, mostraLogout }: Head
             {mostraAdmin && (
               <Link
                 href="/admin"
-                className="hidden sm:inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-medium hover:bg-amber-200 transition-colors"
+                className="hidden sm:inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-lg font-medium hover:bg-blue-200 transition-colors"
               >
-                <span>⚙️</span>
+                <Icon type="admin" size="sm" />
                 Admin
               </Link>
             )}
@@ -65,7 +66,7 @@ export function Header({ titulo, usuarioEmail, mostraAdmin, mostraLogout }: Head
                 onClick={handleLogout}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 rounded-lg font-medium hover:bg-red-100 transition-colors"
               >
-                <span>🚪</span>
+                <Icon type="sair" size="sm" />
                 <span className="hidden sm:inline">Sair</span>
               </button>
             )}
@@ -75,7 +76,7 @@ export function Header({ titulo, usuarioEmail, mostraAdmin, mostraLogout }: Head
                 href="/"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
               >
-                <span>←</span>
+                <Icon type="voltar" size="sm" />
               </Link>
             )}
           </div>
