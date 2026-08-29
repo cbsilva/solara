@@ -55,12 +55,32 @@ A máquina prepara, a pessoa decide. Nenhuma ação sai do sistema sem aprovaç�
    - `SUPABASE_SECRET_KEY`: Chave privada do Supabase (apenas servidor)
    - `ANTHROPIC_API_KEY`: Chave API Anthropic
 
-4. **Inicie o servidor de desenvolvimento**
+4. **Crie as tabelas no Supabase**
+   
+   - Abra o [Painel Supabase](https://supabase.com/dashboard)
+   - Vá em **SQL Editor** → **New query**
+   - Copie e execute o conteúdo de `sql/criar_tabelas.sql`
+   - Isso criará as tabelas `execucoes_agentes` e `aprovacoes` com Realtime habilitado
+   - Veja `sql/README.md` para mais detalhes
+
+5. **Crie um usuário admin**
+   
+   - No painel Supabase: **Authentication** → **Users** → **Add user**
+   - Email e senha de sua escolha
+   - Na aba **SQL**, execute:
+   ```sql
+   INSERT INTO perfis (id, email, nome, papel, areas)
+   SELECT id, email, email as nome, 'admin', ARRAY['vendas', 'financeiro']
+   FROM auth.users
+   WHERE email = 'seu-email@exemplo.com';
+   ```
+
+6. **Inicie o servidor de desenvolvimento**
    ```bash
    npm run dev
    ```
    
-   Acesse http://localhost:3000
+   Acesse http://localhost:3000 e faça login com suas credenciais
 
 ## 📋 Estrutura do Projeto
 
@@ -68,23 +88,35 @@ A máquina prepara, a pessoa decide. Nenhuma ação sai do sistema sem aprovaç�
 solara-os/
 ├── app/                    # Next.js App Router
 │   ├── layout.tsx         # Layout raiz
-│   ├── page.tsx           # Página inicial (protegida)
-│   └── login/
-│       └── page.tsx       # Página de login
+│   ├── page.tsx           # Menu de áreas (protegido)
+│   ├── login/
+│   │   └── page.tsx       # Página de login
+│   ├── admin/
+│   │   └── page.tsx       # Administração de usuários (só admin)
+│   └── api/
+│       └── admin/
+│           └── criar-usuario/route.ts  # API para criar usuário
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts      # Cliente Supabase (browser)
 │   │   └── server.ts      # Cliente Supabase (servidor)
 │   ├── hooks/
 │   │   └── useAuth.ts     # Hook de autenticação
-│   ├── agente.ts          # Função central dos agentes (próximos passos)
+│   ├── agente.ts          # Função central dos agentes ✓
 │   └── orquestradores/    # Orquestração de agentes (próximos passos)
-├── components/            # Componentes React reutilizáveis
-├── prompts/              # Prompts dos agentes em Markdown
-├── dados/                # Arquivos CSV para importação
-├── .env.example          # Template de variáveis de ambiente
-└── package.json          # Dependências e scripts
-
+├── components/
+│   ├── Organograma.tsx         # Visualização de execuções em tempo real ✓
+│   ├── FilaAprovacao.tsx       # Fila de aprovações ✓
+│   └── LinhaDoTempo.tsx        # Timeline de execuções ✓
+├── prompts/               # Prompts dos agentes em Markdown
+│   ├── vendas/            # Prompts da área de Vendas
+│   └── financeiro/        # Prompts da área de Financeiro
+├── sql/                   # Scripts SQL
+│   ├── criar_tabelas.sql  # Criar tabelas execucoes_agentes e aprovacoes
+│   └── README.md          # Instruções
+├── dados/                 # Arquivos CSV para importação
+├── .env.example           # Template de variáveis de ambiente
+└── package.json           # Dependências e scripts
 ```
 
 ## 🔐 Autenticação
@@ -132,14 +164,50 @@ npm run lint         # Executa linting
 4. Se sucesso → redireciona para `/`
 5. Em `/`, exibe "Solara OS" e email do usuário
 
+## ✅ Implementado
+
+### Fundação (Seção 1)
+- ✓ Projeto Next.js 15 com App Router
+- ✓ Supabase Auth (email/senha)
+- ✓ Página de login `/login`
+- ✓ Página inicial protegida `/`
+
+### Casca (Seção 2)
+- ✓ Menu de áreas com cartões (Vendas, Financeiro ativos; RH, Jurídico, Operações em breve)
+- ✓ Página `/admin` para criar usuários (só admin)
+- ✓ Rota de API para criar usuário com service role
+- ✓ Tabela `perfis` com papel e áreas
+
+### Motor (Seção 3)
+- ✓ Função `agente()` em `lib/agente.ts` que:
+  - Cria execução com status `rodando`
+  - Lê prompt de `prompts/<area>/<papel>.md`
+  - Chama API Anthropic
+  - Faz parse JSON
+  - Atualiza status para `ok` ou `erro`
+  - Registra tokens e tempo
+- ✓ Tabelas SQL:
+  - `execucoes_agentes` com Realtime
+  - `aprovacoes` com Realtime
+- ✓ Componente `Organograma` com:
+  - Realtime de execuções
+  - Estados visuais (cinza, pulsando, ok, erro)
+  - Mostra tempo e tokens
+  - Seta vermelha quando revisor reprovar
+- ✓ Componente `FilaAprovacao` com:
+  - Lista de itens pendentes
+  - Edição de proposta
+  - Botões: Aprovar, Salvar e Aprovar, Rejeitar
+  - Realtime
+- ✓ Componente `LinhaDoTempo` com:
+  - Lista de execuções por item
+  - Estados visuais
+  - Expandir para ver entrada/saída/erro
+
 ## 📚 Próximos Passos
 
-A arquitetura está pronta para as próximas seções:
-
-- **Seção 2 - Casca**: Menu de áreas, administração de usuários, tabela `perfis`
-- **Seção 3 - Motor**: Função `agente()`, registro de execuções, organograma, fila de aprovação
-- **Seção 4 - Vendas**: Processamento de pedidos com triador, pesquisador, redator, revisor
-- **Seção 5 - Financeiro**: Conciliação bancária com investigador, consolidador, revisor
+- **Seção 4 - Vendas**: Página `/vendas`, kanban de pedidos, orquestrador com triador, pesquisador, redator, revisor
+- **Seção 5 - Financeiro**: Página `/financeiro`, upload de extrato, orquestrador com investigador, consolidador, revisor
 
 ## 🚀 Deploy na Vercel
 
