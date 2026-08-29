@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Organograma } from '@/components/Organograma'
 import { FilaAprovacao } from '@/components/FilaAprovacao'
 import { LinhaDoTempo } from '@/components/LinhaDoTempo'
+import { Header } from '@/components/Header'
 
 interface PedidoOrcamento {
   cod_pedido: string
@@ -15,10 +16,6 @@ interface PedidoOrcamento {
   canal: string
   data: string
   status: string
-}
-
-interface ClienteData {
-  nome: string
 }
 
 export default function VendasPage() {
@@ -48,7 +45,6 @@ export default function VendasPage() {
 
       setUser({ id: session.user.id, email: session.user.email || '' })
 
-      // Verificar permissão
       const { data: perfilData } = await supabase
         .from('perfis')
         .select()
@@ -62,7 +58,6 @@ export default function VendasPage() {
 
       setPerfil(perfilData)
 
-      // Buscar clientes
       const { data: clientesData } = await supabase
         .from('clientes')
         .select('cod_cliente, nome')
@@ -73,31 +68,19 @@ export default function VendasPage() {
       })
       setClientes(clientesMap)
 
-      // Buscar pedidos
-      const { data: pedidosData } = await supabase
-        .from('pedidos_orcamento')
-        .select()
-        .order('data', { ascending: false })
-
-      if (pedidosData) {
-        setPedidos(pedidosData as PedidoOrcamento[])
-      }
-
+      await buscarPedidos()
       setLoading(false)
     }
 
     checkAuth()
 
-    // Realtime
     const supabase = createClient()
     const channel = supabase
       .channel('pedidos-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'pedidos_orcamento' },
-        () => {
-          buscarPedidos()
-        }
+        () => buscarPedidos()
       )
       .subscribe()
 
@@ -125,8 +108,6 @@ export default function VendasPage() {
     }
 
     const supabase = createClient()
-
-    // Gerar próximo cod_pedido (PED001, PED002, etc)
     const { data: ultimoPedido } = await supabase
       .from('pedidos_orcamento')
       .select('cod_pedido')
@@ -135,9 +116,7 @@ export default function VendasPage() {
 
     let proximo = 'PED001'
     if (ultimoPedido && ultimoPedido.length > 0) {
-      const ultimoNum = parseInt(
-        ultimoPedido[0].cod_pedido.replace('PED', '')
-      )
+      const ultimoNum = parseInt(ultimoPedido[0].cod_pedido.replace('PED', ''))
       proximo = `PED${String(ultimoNum + 1).padStart(3, '0')}`
     }
 
@@ -169,18 +148,24 @@ export default function VendasPage() {
         body: JSON.stringify({ cod_pedido }),
       })
 
-      if (!res.ok) {
-        throw new Error('Erro ao processar pedido')
-      }
-
+      if (!res.ok) throw new Error('Erro ao processar')
       await buscarPedidos()
     } catch (err) {
-      alert(
-        err instanceof Error ? err.message : 'Erro ao processar pedido'
-      )
+      alert(err instanceof Error ? err.message : 'Erro')
     } finally {
       setProcessando(null)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    )
   }
 
   const statusesKanban = ['novo', 'processando', 'aguardando_aprovacao', 'respondido', 'rejeitado']
@@ -192,255 +177,233 @@ export default function VendasPage() {
     {} as Record<string, PedidoOrcamento[]>
   )
 
-  if (loading) return <div style={{ padding: '20px' }}>Carregando...</div>
-
   const pedidoSelecionado = selecionado ? pedidos.find((p) => p.cod_pedido === selecionado) : null
 
+  const statusConfig: Record<string, { cor: string; icone: string }> = {
+    novo: { cor: 'bg-blue-50 border-blue-200', icone: '📝' },
+    processando: { cor: 'bg-yellow-50 border-yellow-200', icone: '⚙️' },
+    aguardando_aprovacao: { cor: 'bg-purple-50 border-purple-200', icone: '⏳' },
+    respondido: { cor: 'bg-green-50 border-green-200', icone: '✅' },
+    rejeitado: { cor: 'bg-red-50 border-red-200', icone: '❌' },
+  }
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      {/* Header */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '15px 20px' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0 }}>Vendas</h2>
-          <div style={{ display: 'flex', gap: '10px' }}>
+    <div className="min-h-screen bg-gray-50">
+      <Header
+        titulo="Vendas - Processamento de Orçamentos"
+        usuarioEmail={user?.email}
+        mostraLogout
+      />
+
+      {/* Organograma */}
+      {selecionado && (
+        <div className="bg-white border-b border-gray-200 p-4 md:p-6">
+          <div className="max-w-7xl mx-auto">
+            <Organograma area="vendas" item_id={selecionado} />
+          </div>
+        </div>
+      )}
+
+      {/* Botões de Ação */}
+      <div className="bg-white border-b border-gray-200 p-4 md:p-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <button
+            onClick={() => setMostraFormulario(!mostraFormulario)}
+            className="w-full md:w-auto px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <span>➕</span>
+            Novo Pedido
+          </button>
+
+          {/* Abas */}
+          <div className="flex gap-2 w-full md:w-auto">
             <button
-              onClick={() => setMostraFormulario(!mostraFormulario)}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
+              onClick={() => setAba('kanban')}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg font-medium transition-all ${
+                aba === 'kanban'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              Novo Pedido
+              📊 Kanban
+            </button>
+            <button
+              onClick={() => setAba('aprovacoes')}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg font-medium transition-all ${
+                aba === 'aprovacoes'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              ✅ Aprovações
             </button>
           </div>
         </div>
       </div>
 
-      {/* Organograma */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '15px 20px' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', minHeight: '100px' }}>
-          {selecionado ? (
-            <Organograma area="vendas" item_id={selecionado} />
-          ) : (
-            <div style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
-              Selecione um pedido para ver o organograma
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Formulário */}
+      {/* Formulário Novo Pedido */}
       {mostraFormulario && (
-        <div style={{ backgroundColor: '#f9f9f9', padding: '15px 20px', borderBottom: '1px solid #eee' }}>
-          <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px' }}>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Cliente</label>
-                <select
-                  value={novoCliente}
-                  onChange={(e) => setNovoCliente(e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+        <div className="bg-blue-50 border-b border-blue-200 p-4 md:p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="bg-white rounded-xl p-6 border border-blue-200">
+              <h3 className="text-lg font-bold text-gray-900 mb-6">Criar Novo Pedido</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div>
+                  <label className="label">Cliente</label>
+                  <select
+                    value={novoCliente}
+                    onChange={(e) => setNovoCliente(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="">Selecione...</option>
+                    {Object.entries(clientes).map(([cod, nome]) => (
+                      <option key={cod} value={cod}>
+                        {nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Canal</label>
+                  <select
+                    value={novoCanal}
+                    onChange={(e) => setNovoCanal(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="email">📧 Email</option>
+                    <option value="whatsapp">💬 WhatsApp</option>
+                    <option value="telefone">📞 Telefone</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="label">Mensagem</label>
+                  <textarea
+                    value={novoMensagem}
+                    onChange={(e) => setNovoMensagem(e.target.value)}
+                    placeholder="Digite a mensagem do cliente..."
+                    className="input-field resize-none h-10"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleNovoPedido}
+                  className="btn-primary"
                 >
-                  <option value="">Selecione...</option>
-                  {Object.entries(clientes).map(([cod, nome]) => (
-                    <option key={cod} value={cod}>
-                      {nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Canal</label>
-                <select
-                  value={novoCanal}
-                  onChange={(e) => setNovoCanal(e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                  ✓ Criar Pedido
+                </button>
+                <button
+                  onClick={() => setMostraFormulario(false)}
+                  className="btn-secondary"
                 >
-                  <option value="email">Email</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="telefone">Telefone</option>
-                </select>
+                  ✕ Cancelar
+                </button>
               </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Mensagem</label>
-                <textarea
-                  value={novoMensagem}
-                  onChange={(e) => setNovoMensagem(e.target.value)}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', minHeight: '60px' }}
-                />
-              </div>
-            </div>
-            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-              <button
-                onClick={handleNovoPedido}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#4caf50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Criar
-              </button>
-              <button
-                onClick={() => setMostraFormulario(false)}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#999',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Abas */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #eee', padding: '0 20px' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', gap: '20px' }}>
-          <button
-            onClick={() => setAba('kanban')}
-            style={{
-              padding: '12px 20px',
-              backgroundColor: aba === 'kanban' ? '#1976d2' : 'transparent',
-              color: aba === 'kanban' ? 'white' : '#333',
-              border: 'none',
-              borderBottom: aba === 'kanban' ? '3px solid #1976d2' : 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            Kanban
-          </button>
-          <button
-            onClick={() => setAba('aprovacoes')}
-            style={{
-              padding: '12px 20px',
-              backgroundColor: aba === 'aprovacoes' ? '#1976d2' : 'transparent',
-              color: aba === 'aprovacoes' ? 'white' : '#333',
-              border: 'none',
-              borderBottom: aba === 'aprovacoes' ? '3px solid #1976d2' : 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            Aprovações
-          </button>
-        </div>
-      </div>
-
-      {/* Conteúdo */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px' }}>
-        {/* Kanban ou Aprovações */}
-        <div>
-          {aba === 'kanban' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px' }}>
-              {statusesKanban.map((status) => (
-                <div key={status} style={{ backgroundColor: '#f5f5f5', borderRadius: '8px', padding: '12px' }}>
-                  <h4 style={{ margin: '0 0 15px 0', textTransform: 'capitalize', color: '#333' }}>
+      {/* Conteúdo Principal */}
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+        {aba === 'kanban' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {statusesKanban.map((status) => (
+              <div
+                key={status}
+                className={`rounded-xl p-4 border-2 ${statusConfig[status].cor}`}
+              >
+                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <span>{statusConfig[status].icone}</span>
+                  <span className="text-sm capitalize">
                     {status.replace(/_/g, ' ')}
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {pedidosPorStatus[status].map((pedido) => (
-                      <div
-                        key={pedido.cod_pedido}
-                        onClick={() => setSelecionado(pedido.cod_pedido)}
-                        style={{
-                          backgroundColor: selecionado === pedido.cod_pedido ? '#e3f2fd' : 'white',
-                          padding: '12px',
-                          borderRadius: '6px',
-                          border: '1px solid #ddd',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'
-                        }}
-                      >
-                        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                          {pedido.cod_pedido}
-                        </div>
-                        <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>
-                          {clientes[pedido.cod_cliente] || pedido.cod_cliente}
-                        </div>
-                        <div style={{ color: '#999', fontSize: '11px', marginBottom: '6px' }}>
-                          {pedido.canal} • {new Date(pedido.data).toLocaleDateString('pt-BR')}
-                        </div>
-                        <div style={{ color: '#555', lineHeight: '1.3' }}>
-                          {pedido.mensagem.substring(0, 60)}...
-                        </div>
-                        {status === 'novo' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleProcessar(pedido.cod_pedido)
-                            }}
-                            disabled={processando === pedido.cod_pedido}
-                            style={{
-                              marginTop: '8px',
-                              padding: '6px 8px',
-                              backgroundColor: processando === pedido.cod_pedido ? '#ccc' : '#2196f3',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '3px',
-                              cursor: processando === pedido.cod_pedido ? 'default' : 'pointer',
-                              fontSize: '12px',
-                              width: '100%',
-                            }}
-                          >
-                            {processando === pedido.cod_pedido ? 'Processando...' : 'Processar'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {pedidosPorStatus[status].length === 0 && (
-                      <div style={{ color: '#ccc', textAlign: 'center', padding: '20px 0' }}>
-                        Vazio
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            user && (
-              <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', height: '600px' }}>
-                <FilaAprovacao area="vendas" usuarioId={user.id} />
-              </div>
-            )
-          )}
-        </div>
+                  </span>
+                  <span className="ml-auto bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs font-semibold">
+                    {pedidosPorStatus[status].length}
+                  </span>
+                </h3>
 
-        {/* Painel lateral */}
-        {pedidoSelecionado && (
-          <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '15px', borderBottom: '1px solid #eee' }}>
-              <h4 style={{ margin: 0 }}>{pedidoSelecionado.cod_pedido}</h4>
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                {clientes[pedidoSelecionado.cod_cliente]}
+                <div className="space-y-3">
+                  {pedidosPorStatus[status].map((pedido) => (
+                    <button
+                      key={pedido.cod_pedido}
+                      onClick={() => setSelecionado(pedido.cod_pedido)}
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                        selecionado === pedido.cod_pedido
+                          ? 'bg-white border-blue-500 shadow-md'
+                          : 'bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="font-bold text-gray-900">{pedido.cod_pedido}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {clientes[pedido.cod_cliente] || pedido.cod_cliente}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-2">
+                        {pedido.canal} • {new Date(pedido.data).toLocaleDateString('pt-BR')}
+                      </div>
+                      <div className="text-xs text-gray-700 mt-2 line-clamp-2">
+                        {pedido.mensagem}
+                      </div>
+
+                      {status === 'novo' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleProcessar(pedido.cod_pedido)
+                          }}
+                          disabled={processando === pedido.cod_pedido}
+                          className="mt-3 w-full px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                        >
+                          {processando === pedido.cod_pedido ? '⏳ Processando...' : '🚀 Processar'}
+                        </button>
+                      )}
+                    </button>
+                  ))}
+
+                  {pedidosPorStatus[status].length === 0 && (
+                    <div className="text-center py-8 text-gray-400">
+                      <div className="text-3xl mb-2">📭</div>
+                      <p className="text-sm">Vazio</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto' }}>
-              <LinhaDoTempo item_id={pedidoSelecionado.cod_pedido} />
-            </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200" style={{ height: '600px' }}>
+            {user && <FilaAprovacao area="vendas" usuarioId={user.id} />}
           </div>
         )}
-      </div>
+      </main>
+
+      {/* Painel Lateral */}
+      {pedidoSelecionado && aba === 'kanban' && (
+        <div className="fixed inset-0 bg-black/50 md:hidden z-40" onClick={() => setSelecionado(null)} />
+      )}
+      {pedidoSelecionado && (
+        <div className="hidden md:block fixed right-0 top-0 bottom-0 w-80 bg-white border-l border-gray-200 shadow-xl overflow-y-auto">
+          <div className="p-4 border-b border-gray-200">
+            <button
+              onClick={() => setSelecionado(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl"
+            >
+              ✕
+            </button>
+            <h3 className="font-bold text-gray-900">{pedidoSelecionado.cod_pedido}</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              {clientes[pedidoSelecionado.cod_cliente]}
+            </p>
+          </div>
+          <div className="flex-1">
+            <LinhaDoTempo item_id={pedidoSelecionado.cod_pedido} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
