@@ -199,7 +199,8 @@ export default function AdminPage() {
             </div>
 
             <div className="admin-grade">
-              {/* Formulário */}
+              {/* Coluna dos formulários */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
               <form className="card" onSubmit={criarUsuario}>
                 <div className="card-head">
                   <Icon type="conta" size="md" />
@@ -315,6 +316,7 @@ export default function AdminPage() {
                   </div>
                 </form>
               )}
+              </div>
 
               {/* Tabela */}
               <div className="tabela-wrap">
