@@ -258,11 +258,11 @@ export default function VendasPage() {
                 </div>
 
                 {porStatus[status].map((pedido) => (
-                  <button
+                  <div
                     key={pedido.cod_pedido}
-                    type="button"
                     className={`cartao ${selecionado === pedido.cod_pedido ? 'is-selected' : ''}`}
                     onClick={() => setSelecionado(pedido.cod_pedido)}
+                    style={{ cursor: 'pointer' }}
                   >
                     <div className="cartao-codigo">{pedido.cod_pedido}</div>
                     <div className="cartao-linha">{clientes[pedido.cod_cliente] || pedido.cod_cliente}</div>
@@ -286,7 +286,7 @@ export default function VendasPage() {
                         {processando === pedido.cod_pedido ? 'Processando…' : 'Processar'}
                       </button>
                     )}
-                  </button>
+                  </div>
                 ))}
 
                 {porStatus[status].length === 0 && (
