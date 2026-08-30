@@ -201,6 +201,7 @@ export default function AdminPage() {
             <div className="admin-grade">
               {/* Coluna dos formulários */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
+              {!editando && (
               <form className="card" onSubmit={criarUsuario}>
                 <div className="card-head">
                   <Icon type="conta" size="md" />
@@ -262,6 +263,7 @@ export default function AdminPage() {
                   </button>
                 </div>
               </form>
+              )}
 
               {/* Formulário de edição */}
               {editando && (
