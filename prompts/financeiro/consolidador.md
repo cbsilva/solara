@@ -22,6 +22,7 @@ O relatorio deve ser facil de ler para o Rafael (contador).
 
 Retorne um JSON:
 
+```json
 {
   "relatorio_markdown": "## Resumo da Conciliacao...\n\n### Casados...",
   "acoes": [
@@ -34,6 +35,7 @@ Retorne um JSON:
     }
   ]
 }
+```
 
 ## Regras
 

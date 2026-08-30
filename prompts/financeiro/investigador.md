@@ -34,6 +34,7 @@ Para cada hipotese, retorne:
 
 Retorne um JSON:
 
+```json
 {
   "hipotese": "pagamento_parcial",
   "explicacao": "Cliente pagou R$ 1000,00 de R$ 1500,00 do titulo TIT001",
@@ -43,6 +44,7 @@ Retorne um JSON:
   "valor_a_baixar": 1000.00,
   "valor_pendente": 500.00
 }
+```
 
 ## Regras
 

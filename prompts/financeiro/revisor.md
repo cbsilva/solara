@@ -23,13 +23,16 @@ Se tudo OK, aprove. Se houver problemas, liste os motivos para o Consolidador re
 
 Se APROVADO:
 
+```json
 {
   "aprovado": true,
   "motivos": []
 }
+```
 
 Se REPROVADO:
 
+```json
 {
   "aprovado": false,
   "motivos": [
@@ -37,6 +40,7 @@ Se REPROVADO:
     "Hipotese de TIT002: 1000 + 500 = 1500, mas titulo vale 1600"
   ]
 }
+```
 
 ## Regras
 

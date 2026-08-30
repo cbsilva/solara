@@ -24,10 +24,12 @@ Se vierem `ajustes`, reescreva o texto atendendo cada ponto.
 
 Retorne um JSON com exatamente este formato:
 
+```json
 {
   "resposta": "Alteracao de faixa salarial de Ana Ribeiro (COL001).\n\nSalario atual: R$ 4.200,00\nSalario pretendido: R$ 4.620,00 (+10,0%)\nUltima alteracao: ha 19 meses\n\nJustificativa: promocao para analista pleno apos avaliacao trimestral positiva.",
   "resumo": "Ana Ribeiro · +10,0% · R$ 4.620,00"
 }
+```
 
 ## Regras
 
