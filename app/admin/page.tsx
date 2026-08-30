@@ -283,29 +283,28 @@ function AdminAgentes() {
   useEffect(() => {
     const buscar = async () => {
       try {
-        const { data: usuariosData, error } = await supabase
+        // Buscar todos os usuários do auth
+        const { data: { users }, error: erroAuth } = await supabase.auth.admin.listUsers()
+
+        if (erroAuth) throw erroAuth
+
+        // Buscar permissões existentes
+        const { data: perfis, error: erroPerfis } = await supabase
           .from('perfis_usuario')
-          .select(`
-            id,
-            usar_agente,
-            auth_usuario:id (email)
-          `)
+          .select('id, usar_agente')
 
-        if (error) throw error
+        if (erroPerfis) throw erroPerfis
 
-        if (usuariosData) {
-          const usuarios = await Promise.all(
-            usuariosData.map(async (u: any) => {
-              const { data: userData } = await supabase.auth.admin.getUserById(u.id)
-              return {
-                id: u.id,
-                email: userData?.user?.email || 'Email desconhecido',
-                usar_agente: u.usar_agente,
-              }
-            })
-          )
-          setUsuarios(usuarios)
-        }
+        // Combinar dados
+        const perfisMap = new Map(perfis?.map((p: any) => [p.id, p.usar_agente]) || [])
+
+        const usuariosFormatados = users.map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          usar_agente: perfisMap.get(u.id) || false,
+        }))
+
+        setUsuarios(usuariosFormatados.sort((a, b) => a.email.localeCompare(b.email)))
       } catch (err) {
         console.error(err)
       } finally {
