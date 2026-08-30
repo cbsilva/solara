@@ -42,7 +42,7 @@ export async function orquestradorFinanceiro(extrato_id: string) {
     .eq('status', 'aberto')
 
   // Criar execução raiz
-  const { data: orquestradorExec } = await supabase
+  const { data: orquestradorExecData, error: erroExec } = await supabase
     .from('execucoes_agentes')
     .insert({
       area: 'financeiro',
@@ -54,12 +54,12 @@ export async function orquestradorFinanceiro(extrato_id: string) {
       inicio: new Date().toISOString(),
     })
     .select()
-    .single()
 
-  if (!orquestradorExec) {
-    throw new Error('Erro ao criar execução raiz')
+  if (erroExec || !orquestradorExecData || orquestradorExecData.length === 0) {
+    throw new Error(`Erro ao criar execução raiz: ${erroExec?.message || 'Sem dados retornados'}`)
   }
 
+  const orquestradorExec = orquestradorExecData[0]
   const orquestradorId = orquestradorExec.id
 
   try {

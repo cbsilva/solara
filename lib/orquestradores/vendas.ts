@@ -1,16 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { agente } from '@/lib/agente'
 
-interface PedidoOrcamento {
-  cod_pedido: string
-  cod_cliente: string
-  mensagem: string
-  canal: string
-  data: string
-  cliente_nome: string
-  cliente_segmento: string
-}
-
 interface ClienteInfo {
   cod_cliente: string
   nome: string
@@ -31,15 +21,16 @@ export async function orquestradorVendas(cod_pedido: string) {
   const supabase = createServerClient()
 
   // 1. Buscar pedido
-  const { data: pedido } = await supabase
+  const { data: pedidosData, error: erroPedido } = await supabase
     .from('pedidos_orcamento')
     .select()
     .eq('cod_pedido', cod_pedido)
-    .single()
 
-  if (!pedido) {
+  if (erroPedido || !pedidosData || pedidosData.length === 0) {
     throw new Error(`Pedido ${cod_pedido} não encontrado`)
   }
+
+  const pedido = pedidosData[0]
 
   // Atualizar para processando
   await supabase
@@ -48,7 +39,7 @@ export async function orquestradorVendas(cod_pedido: string) {
     .eq('cod_pedido', cod_pedido)
 
   // Criar execução raiz
-  const { data: orquestradorExec } = await supabase
+  const { data: orquestradorExecData, error: erroExec } = await supabase
     .from('execucoes_agentes')
     .insert({
       area: 'vendas',
@@ -60,11 +51,12 @@ export async function orquestradorVendas(cod_pedido: string) {
       inicio: new Date().toISOString(),
     })
     .select()
-    .single()
 
-  if (!orquestradorExec) {
-    throw new Error('Erro ao criar execução raiz')
+  if (erroExec || !orquestradorExecData || orquestradorExecData.length === 0) {
+    throw new Error(`Erro ao criar execução raiz: ${erroExec?.message || 'Sem dados retornados'}`)
   }
+
+  const orquestradorExec = orquestradorExecData[0]
 
   const orquestradorId = orquestradorExec.id
 

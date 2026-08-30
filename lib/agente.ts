@@ -25,7 +25,7 @@ export async function agente(
 
   try {
     // 1. Criar registro com status 'rodando'
-    const { data: execucaoInicio, error: erroInsert } = await supabase
+    const { data: execucaoInicioData, error: erroInsert } = await supabase
       .from('execucoes_agentes')
       .insert({
         area: contexto.area,
@@ -38,13 +38,12 @@ export async function agente(
         inicio: new Date().toISOString(),
       })
       .select()
-      .single()
 
-    if (erroInsert || !execucaoInicio) {
-      throw new Error(`Erro ao inserir execução: ${erroInsert?.message}`)
+    if (erroInsert || !execucaoInicioData || execucaoInicioData.length === 0) {
+      throw new Error(`Erro ao inserir execução: ${erroInsert?.message || 'Sem dados retornados'}`)
     }
 
-    const execucaoId = execucaoInicio.id
+    const execucaoId = execucaoInicioData[0].id
 
     // 2. Ler prompt
     const promptPath = path.join(
@@ -111,7 +110,7 @@ export async function agente(
     // Se deu erro, registrar na linha de execução
     if (erro instanceof Error) {
       // Tentar atualizar o status para erro (pode falhar se o insert inicial falhou)
-      const { data: execucoes } = await supabase
+      const { data: execucoes, error: erroQuery } = await supabase
         .from('execucoes_agentes')
         .select('id')
         .eq('agente', papel)
@@ -119,9 +118,8 @@ export async function agente(
         .eq('status', 'rodando')
         .order('inicio', { ascending: false })
         .limit(1)
-        .single()
 
-      if (execucoes) {
+      if (execucoes && execucoes.length > 0) {
         await supabase
           .from('execucoes_agentes')
           .update({
@@ -129,7 +127,7 @@ export async function agente(
             erro: erro.message,
             fim: new Date().toISOString(),
           })
-          .eq('id', execucoes.id)
+          .eq('id', execucoes[0].id)
       }
     }
 

@@ -11,15 +11,16 @@ export async function orquestradorRh(id_faixa: string) {
   const supabase = createServerClient()
 
   // 1. Buscar a faixa
-  const { data: faixa } = await supabase
+  const { data: faixaData, error: erroFaixa } = await supabase
     .from('faixas_salariais')
     .select()
     .eq('id_faixa', id_faixa)
-    .single()
 
-  if (!faixa) {
+  if (erroFaixa || !faixaData || faixaData.length === 0) {
     throw new Error(`Faixa ${id_faixa} não encontrada`)
   }
+
+  const faixa = faixaData[0]
 
   // Atualizar para processando
   await supabase
@@ -28,7 +29,7 @@ export async function orquestradorRh(id_faixa: string) {
     .eq('id_faixa', id_faixa)
 
   // Criar execução raiz
-  const { data: orquestradorExec } = await supabase
+  const { data: orquestradorExecData, error: erroExec } = await supabase
     .from('execucoes_agentes')
     .insert({
       area: 'rh',
@@ -40,21 +41,22 @@ export async function orquestradorRh(id_faixa: string) {
       inicio: new Date().toISOString(),
     })
     .select()
-    .single()
 
-  if (!orquestradorExec) {
-    throw new Error('Erro ao criar execução raiz')
+  if (erroExec || !orquestradorExecData || orquestradorExecData.length === 0) {
+    throw new Error(`Erro ao criar execução raiz: ${erroExec?.message || 'Sem dados retornados'}`)
   }
 
+  const orquestradorExec = orquestradorExecData[0]
   const orquestradorId = orquestradorExec.id
 
   try {
     // Colaborador (usado por vários agentes)
-    const { data: colaboradorData } = await supabase
+    const { data: colaboradorDataArray } = await supabase
       .from('colaboradores')
       .select()
       .eq('id_colaborador', faixa.id_colaborador)
-      .single()
+
+    const colaboradorData = colaboradorDataArray && colaboradorDataArray.length > 0 ? colaboradorDataArray[0] : null
 
     const colaborador = {
       id_colaborador: faixa.id_colaborador,
