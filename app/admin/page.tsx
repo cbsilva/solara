@@ -200,8 +200,8 @@ export default function AdminPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
               {/* Formulários */}
-              <div style={{ display: 'flex', gap: 'var(--sp-6)', flexWrap: 'wrap' }}>
-                <form className="card" onSubmit={criarUsuario} style={{ flex: 1, minWidth: '320px' }}>
+              <div style={{ display: 'flex', gap: 'var(--sp-6)', alignItems: 'flex-start' }}>
+                <form className="card" onSubmit={criarUsuario}>
                 <div className="card-head">
                   <Icon type="conta" size="md" />
                   Novo usuário
@@ -265,7 +265,7 @@ export default function AdminPage() {
 
               {/* Formulário de edição */}
               {editando && (
-                <form className="card" onSubmit={salvarEdicao} style={{ flex: 1, minWidth: '320px' }}>
+                <form className="card" onSubmit={salvarEdicao} style={{ flex: '0 1 350px' }}>
                   <div className="card-head">
                     <Icon type="editar" size="md" />
                     Editar usuário
