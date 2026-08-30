@@ -355,8 +355,9 @@ export default function AdminPage() {
                           <td style={{ textAlign: 'center' }}>
                             <button
                               type="button"
-                              className="btn btn--secondary btn--sm"
+                              className="btn btn--sm"
                               onClick={() => iniciarEdicao(perfil)}
+                              style={{ background: 'var(--info)', color: 'white', border: 'none' }}
                             >
                               <Icon type="editar" size="sm" />
                               Editar
