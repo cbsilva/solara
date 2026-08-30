@@ -109,3 +109,15 @@ CREATE INDEX idx_divergencias_cod_titulo ON divergencias(cod_titulo);
 ALTER PUBLICATION supabase_realtime ADD TABLE extratos_importados;
 ALTER PUBLICATION supabase_realtime ADD TABLE lancamentos;
 ALTER PUBLICATION supabase_realtime ADD TABLE divergencias;
+
+---
+
+-- Tabela: perfis_usuario
+CREATE TABLE perfis_usuario (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  usar_agente BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_perfis_usar_agente ON perfis_usuario(usar_agente);

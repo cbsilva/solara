@@ -41,6 +41,7 @@ export default function VendasPage() {
   const [novoCanal, setNovoCanal] = useState('email')
   const [novaMensagem, setNovaMensagem] = useState('')
   const [processando, setProcessando] = useState<string | null>(null)
+  const [alerta, setAlerta] = useState<{ tipo: 'erro' | 'aviso'; mensagem: string } | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -121,16 +122,25 @@ export default function VendasPage() {
 
   const processar = async (cod_pedido: string) => {
     setProcessando(cod_pedido)
+    setAlerta(null)
     try {
       const res = await fetch('/api/vendas/processar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cod_pedido }),
       })
-      if (!res.ok) throw new Error('Erro ao processar pedido')
+      const data = await res.json()
+      if (!res.ok) {
+        if (res.status === 403) {
+          setAlerta({ tipo: 'aviso', mensagem: data.erro })
+        } else {
+          setAlerta({ tipo: 'erro', mensagem: data.erro || 'Erro ao processar pedido' })
+        }
+        return
+      }
       await buscarPedidos()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro')
+      setAlerta({ tipo: 'erro', mensagem: err instanceof Error ? err.message : 'Erro' })
     } finally {
       setProcessando(null)
     }
@@ -155,6 +165,21 @@ export default function VendasPage() {
   return (
     <div className="pagina-app">
       <Header contexto="Vendas · Orçamentos" usuarioEmail={user?.email} mostraInicio mostraLogout />
+
+      {alerta && (
+        <div
+          style={{
+            padding: 'var(--sp-4)',
+            marginBottom: 'var(--sp-4)',
+            borderRadius: 'var(--br)',
+            background: alerta.tipo === 'aviso' ? 'var(--warning-bg)' : 'var(--danger-bg)',
+            color: alerta.tipo === 'aviso' ? 'var(--warning-text)' : 'var(--danger-text)',
+            border: `1px solid ${alerta.tipo === 'aviso' ? 'var(--warning)' : 'var(--danger)'}`,
+          }}
+        >
+          {alerta.mensagem}
+        </div>
+      )}
 
       <main className="app-main">
         {/* Cabeçalho da tela */}
