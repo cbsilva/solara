@@ -35,6 +35,12 @@ export default function AdminPage() {
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
 
+  const [editando, setEditando] = useState<string | null>(null)
+  const [nomeEdit, setNomeEdit] = useState('')
+  const [papelEdit, setPapelEdit] = useState('operador')
+  const [areasEdit, setAreasEdit] = useState<string[]>([])
+  const [salvandoEdit, setSalvandoEdit] = useState(false)
+
   useEffect(() => {
     const verificar = async () => {
       const supabase = createClient()
@@ -98,6 +104,42 @@ export default function AdminPage() {
     } finally {
       setCriando(false)
     }
+  }
+
+  const salvarEdicao = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErro('')
+    setSucesso('')
+    setSalvandoEdit(true)
+    try {
+      if (!nomeEdit || !papelEdit || areasEdit.length === 0) {
+        throw new Error('Preencha todos os campos.')
+      }
+      const res = await fetch('/api/admin/editar-usuario', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editando, nome: nomeEdit, papel: papelEdit, areas: areasEdit }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.erro || 'Erro ao editar usuário')
+      }
+      setSucesso('Usuário atualizado com sucesso.')
+      setEditando(null)
+      await buscarPerfis()
+      setTimeout(() => setSucesso(''), 4000)
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Erro ao editar usuário')
+    } finally {
+      setSalvandoEdit(false)
+    }
+  }
+
+  const iniciarEdicao = (perfil: Perfil) => {
+    setEditando(perfil.id)
+    setNomeEdit(perfil.nome)
+    setPapelEdit(perfil.papel)
+    setAreasEdit(perfil.areas)
   }
 
   if (carregando) {
@@ -220,6 +262,60 @@ export default function AdminPage() {
                 </div>
               </form>
 
+              {/* Formulário de edição */}
+              {editando && (
+                <form className="card" onSubmit={salvarEdicao}>
+                  <div className="card-head">
+                    <Icon type="editar" size="md" />
+                    Editar usuário
+                  </div>
+                  <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+                    <div className="field">
+                      <label htmlFor="e-nome">Nome</label>
+                      <input id="e-nome" type="text" className="input" value={nomeEdit} onChange={(e) => setNomeEdit(e.target.value)} placeholder="Nome completo" required />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="e-papel">Papel</label>
+                      <div className="select-wrap">
+                        <select id="e-papel" className="select" value={papelEdit} onChange={(e) => setPapelEdit(e.target.value)}>
+                          {PAPEIS.map((p) => (
+                            <option key={p} value={p}>{p === 'admin' ? 'Admin' : 'Operador'}</option>
+                          ))}
+                        </select>
+                        <Icon type="chevron-baixo" size="sm" />
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>Áreas de acesso</label>
+                      <div className="checklist">
+                        {AREAS.map((area) => (
+                          <label key={area} className="ctl">
+                            <input type="checkbox" checked={areasEdit.includes(area)} onChange={() => setAreasEdit((prev) => prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area])} />
+                            <span style={{ textTransform: 'capitalize' }}>{area}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {erro && (
+                      <div className="aviso aviso--erro">
+                        <Icon type="alerta" size="sm" />
+                        <span>{erro}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="card-foot" style={{ display: 'flex', gap: 'var(--sp-3)' }}>
+                    <button type="submit" className="btn btn--primary" disabled={salvandoEdit}>
+                      {salvandoEdit ? <span className="spinner" /> : <Icon type="check" size="sm" />}
+                      {salvandoEdit ? 'Salvando…' : 'Salvar'}
+                    </button>
+                    <button type="button" className="btn" onClick={() => setEditando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
+
               {/* Tabela */}
               <div className="tabela-wrap">
                 <table className="tabela">
@@ -229,6 +325,7 @@ export default function AdminPage() {
                       <th>Nome</th>
                       <th>Papel</th>
                       <th>Áreas</th>
+                      <th>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -254,6 +351,17 @@ export default function AdminPage() {
                                 <span key={a} className="badge badge--neutral">{a}</span>
                               ))}
                             </div>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn--sm"
+                              onClick={() => iniciarEdicao(perfil)}
+                              style={{ background: 'var(--info)', color: 'white', border: 'none', cursor: 'pointer' }}
+                            >
+                              <Icon type="editar" size="sm" />
+                              Editar
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -283,28 +391,10 @@ function AdminAgentes() {
   useEffect(() => {
     const buscar = async () => {
       try {
-        // Buscar todos os usuários do auth
-        const { data: { users }, error: erroAuth } = await supabase.auth.admin.listUsers()
-
-        if (erroAuth) throw erroAuth
-
-        // Buscar permissões existentes
-        const { data: perfis, error: erroPerfis } = await supabase
-          .from('perfis_usuario')
-          .select('id, usar_agente')
-
-        if (erroPerfis) throw erroPerfis
-
-        // Combinar dados
-        const perfisMap = new Map(perfis?.map((p: any) => [p.id, p.usar_agente]) || [])
-
-        const usuariosFormatados = users.map((u: any) => ({
-          id: u.id,
-          email: u.email,
-          usar_agente: perfisMap.get(u.id) || false,
-        }))
-
-        setUsuarios(usuariosFormatados.sort((a, b) => a.email.localeCompare(b.email)))
+        const res = await fetch('/api/admin/listar-usuarios')
+        if (!res.ok) throw new Error('Erro ao buscar usuários')
+        const usuarios = await res.json()
+        setUsuarios(usuarios)
       } catch (err) {
         console.error(err)
       } finally {
