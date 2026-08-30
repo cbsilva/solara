@@ -198,10 +198,9 @@ export default function AdminPage() {
               <p className="app-subtitulo">Crie acessos e defina papel e áreas de cada pessoa.</p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-6)' }}>
-              {/* Formulários */}
-              <div style={{ display: 'flex', gap: 'var(--sp-6)', alignItems: 'flex-start' }}>
-                <form className="card" onSubmit={criarUsuario}>
+            <div className="admin-grade">
+              {/* Formulário */}
+              <form className="card" onSubmit={criarUsuario}>
                 <div className="card-head">
                   <Icon type="conta" size="md" />
                   Novo usuário
@@ -265,7 +264,7 @@ export default function AdminPage() {
 
               {/* Formulário de edição */}
               {editando && (
-                <form className="card" onSubmit={salvarEdicao} style={{ flex: '0 1 350px' }}>
+                <form className="card" onSubmit={salvarEdicao}>
                   <div className="card-head">
                     <Icon type="editar" size="md" />
                     Editar usuário
@@ -316,7 +315,6 @@ export default function AdminPage() {
                   </div>
                 </form>
               )}
-              </div>
 
               {/* Tabela */}
               <div className="tabela-wrap">
@@ -327,7 +325,7 @@ export default function AdminPage() {
                       <th>Nome</th>
                       <th>Papel</th>
                       <th>Áreas</th>
-                      <th style={{ textAlign: 'center' }}>Ação</th>
+                      <th>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
