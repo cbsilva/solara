@@ -116,8 +116,8 @@ export async function orquestradorVendas(cod_pedido: string) {
 
     const cliente: ClienteInfo = {
       cod_cliente: pedido.cod_cliente,
-      nome: pedido.cliente_nome,
-      segmento: pedido.cliente_segmento,
+      nome: pedido.cliente_nome || clienteData?.nome || pedido.cod_cliente,
+      segmento: pedido.cliente_segmento || clienteData?.segmento || 'N/A',
       condicao_pagamento_dias: clienteData?.condicao_pagamento_dias || 30,
       desconto_maximo_pct: clienteData?.desconto_maximo_pct || 5,
     }
