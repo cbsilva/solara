@@ -156,112 +156,113 @@ export default function AdminPage() {
               <p className="app-subtitulo">Crie acessos e defina papel e áreas de cada pessoa.</p>
             </div>
 
-        <div className="admin-grade">
-          {/* Formulário */}
-          <form className="card" onSubmit={criarUsuario}>
-            <div className="card-head">
-              <Icon type="conta" size="md" />
-              Novo usuário
-            </div>
-            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
-              <div className="field">
-                <label htmlFor="a-email">E-mail</label>
-                <input id="a-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@solara.com.br" required />
-              </div>
-              <div className="field">
-                <label htmlFor="a-senha">Senha inicial</label>
-                <input id="a-senha" type="password" className="input" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha temporária" required />
-              </div>
-              <div className="field">
-                <label htmlFor="a-nome">Nome</label>
-                <input id="a-nome" type="text" className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" required />
-              </div>
-              <div className="field">
-                <label htmlFor="a-papel">Papel</label>
-                <div className="select-wrap">
-                  <select id="a-papel" className="select" value={papel} onChange={(e) => setPapel(e.target.value)}>
-                    {PAPEIS.map((p) => (
-                      <option key={p} value={p}>{p === 'admin' ? 'Admin' : 'Operador'}</option>
-                    ))}
-                  </select>
-                  <Icon type="chevron-baixo" size="sm" />
+            <div className="admin-grade">
+              {/* Formulário */}
+              <form className="card" onSubmit={criarUsuario}>
+                <div className="card-head">
+                  <Icon type="conta" size="md" />
+                  Novo usuário
                 </div>
-              </div>
-              <div className="field">
-                <label>Áreas de acesso</label>
-                <div className="checklist">
-                  {AREAS.map((area) => (
-                    <label key={area} className="ctl">
-                      <input type="checkbox" checked={areasForm.includes(area)} onChange={() => alternarArea(area)} />
-                      <span style={{ textTransform: 'capitalize' }}>{area}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+                  <div className="field">
+                    <label htmlFor="a-email">E-mail</label>
+                    <input id="a-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@solara.com.br" required />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="a-senha">Senha inicial</label>
+                    <input id="a-senha" type="password" className="input" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha temporária" required />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="a-nome">Nome</label>
+                    <input id="a-nome" type="text" className="input" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" required />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="a-papel">Papel</label>
+                    <div className="select-wrap">
+                      <select id="a-papel" className="select" value={papel} onChange={(e) => setPapel(e.target.value)}>
+                        {PAPEIS.map((p) => (
+                          <option key={p} value={p}>{p === 'admin' ? 'Admin' : 'Operador'}</option>
+                        ))}
+                      </select>
+                      <Icon type="chevron-baixo" size="sm" />
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label>Áreas de acesso</label>
+                    <div className="checklist">
+                      {AREAS.map((area) => (
+                        <label key={area} className="ctl">
+                          <input type="checkbox" checked={areasForm.includes(area)} onChange={() => alternarArea(area)} />
+                          <span style={{ textTransform: 'capitalize' }}>{area}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-              {erro && (
-                <div className="aviso aviso--erro">
-                  <Icon type="alerta" size="sm" />
-                  <span>{erro}</span>
+                  {erro && (
+                    <div className="aviso aviso--erro">
+                      <Icon type="alerta" size="sm" />
+                      <span>{erro}</span>
+                    </div>
+                  )}
+                  {sucesso && (
+                    <div className="aviso aviso--ok">
+                      <Icon type="check" size="sm" />
+                      <span>{sucesso}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-              {sucesso && (
-                <div className="aviso aviso--ok">
-                  <Icon type="check" size="sm" />
-                  <span>{sucesso}</span>
+                <div className="card-foot">
+                  <button type="submit" className="btn btn--primary" disabled={criando}>
+                    {criando ? <span className="spinner" /> : <Icon type="check" size="sm" />}
+                    {criando ? 'Criando…' : 'Criar usuário'}
+                  </button>
                 </div>
-              )}
-            </div>
-            <div className="card-foot">
-              <button type="submit" className="btn btn--primary" disabled={criando}>
-                {criando ? <span className="spinner" /> : <Icon type="check" size="sm" />}
-                {criando ? 'Criando…' : 'Criar usuário'}
-              </button>
-            </div>
-          </form>
+              </form>
 
-          {/* Tabela */}
-          <div className="tabela-wrap">
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>E-mail</th>
-                  <th>Nome</th>
-                  <th>Papel</th>
-                  <th>Áreas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {perfis.length === 0 ? (
-                  <tr>
-                    <td colSpan={4}>
-                      <p className="estado-vazio">Nenhum usuário cadastrado</p>
-                    </td>
-                  </tr>
-                ) : (
-                  perfis.map((perfil) => (
-                    <tr key={perfil.id}>
-                      <td style={{ color: 'var(--text-strong)', fontWeight: 500 }}>{perfil.email}</td>
-                      <td>{perfil.nome}</td>
-                      <td>
-                        <span className={`badge ${perfil.papel === 'admin' ? 'badge--promo' : 'badge--neutral'}`}>
-                          {perfil.papel === 'admin' ? 'Admin' : 'Operador'}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {perfil.areas.map((a) => (
-                            <span key={a} className="badge badge--neutral">{a}</span>
-                          ))}
-                        </div>
-                      </td>
+              {/* Tabela */}
+              <div className="tabela-wrap">
+                <table className="tabela">
+                  <thead>
+                    <tr>
+                      <th>E-mail</th>
+                      <th>Nome</th>
+                      <th>Papel</th>
+                      <th>Áreas</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-            </>
+                  </thead>
+                  <tbody>
+                    {perfis.length === 0 ? (
+                      <tr>
+                        <td colSpan={4}>
+                          <p className="estado-vazio">Nenhum usuário cadastrado</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      perfis.map((perfil) => (
+                        <tr key={perfil.id}>
+                          <td style={{ color: 'var(--text-strong)', fontWeight: 500 }}>{perfil.email}</td>
+                          <td>{perfil.nome}</td>
+                          <td>
+                            <span className={`badge ${perfil.papel === 'admin' ? 'badge--promo' : 'badge--neutral'}`}>
+                              {perfil.papel === 'admin' ? 'Admin' : 'Operador'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                              {perfil.areas.map((a) => (
+                                <span key={a} className="badge badge--neutral">{a}</span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
 
         {aba === 'agentes' && (
