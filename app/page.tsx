@@ -7,6 +7,7 @@ import { Header } from '@/components/Header'
 import { Icon, IconType } from '@/components/Icon'
 
 interface Perfil {
+  nome: string
   papel: string
   areas: string[]
 }
@@ -67,7 +68,7 @@ export default function HomePage() {
 
       <main className="app-main">
         <div style={{ marginBottom: 'var(--sp-8)' }}>
-          <h1 className="app-titulo">Bem-vindo, {user?.email?.split('@')[0]}</h1>
+          <h1 className="app-titulo">Bem-vindo, {perfil?.nome?.split(' ')[0] || user?.email?.split('@')[0]}</h1>
           <p className="app-subtitulo">Selecione uma área para começar.</p>
         </div>
 
