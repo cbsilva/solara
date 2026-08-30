@@ -81,7 +81,13 @@ export async function agente(
 
     let saida: Record<string, any>
     try {
-      saida = JSON.parse(conteudo.text)
+      let jsonText = conteudo.text.trim()
+      // Extrair JSON de dentro de bloco de código markdown se necessário
+      const jsonMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+      if (jsonMatch) {
+        jsonText = jsonMatch[1].trim()
+      }
+      saida = JSON.parse(jsonText)
     } catch (err) {
       throw new Error(`Falha ao fazer parse JSON: ${conteudo.text}`)
     }
