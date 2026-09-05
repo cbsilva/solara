@@ -182,7 +182,8 @@ export default function VendasPage() {
         </div>
       )}
 
-      <main className="app-main">
+      <main className={`app-main ${pedidoSel ? 'app-main--com-detalhe' : ''}`}>
+      <div className="app-main-conteudo">
         {/* Cabeçalho da tela */}
         <div className="tela-cabecalho">
           <div>
@@ -326,13 +327,11 @@ export default function VendasPage() {
             {user && <FilaAprovacao area="vendas" usuarioId={user.id} />}
           </div>
         )}
-      </main>
+      </div>
 
-      {/* Painel lateral */}
-      {pedidoSel && (
-        <>
-          <div className="drawer-scrim" onClick={() => setSelecionado(null)} />
-          <aside className="drawer">
+        {/* Painel lateral de execuções — ao lado, sem escurecer o resto da tela */}
+        {pedidoSel && (
+          <aside className="app-main-detalhe">
             <div className="drawer-head">
               <div>
                 <h3 style={{ fontFamily: 'var(--font-mono)' }}>{pedidoSel.cod_pedido}</h3>
@@ -344,8 +343,8 @@ export default function VendasPage() {
             </div>
             <LinhaDoTempo item_id={pedidoSel.cod_pedido} />
           </aside>
-        </>
-      )}
+        )}
+      </main>
     </div>
   )
 }

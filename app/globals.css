@@ -68,6 +68,31 @@ a { color: inherit; }
   .app-main { padding: var(--sp-4); }
 }
 
+/* Tela com painel de detalhe ao lado (ex.: execuções do item selecionado) */
+.app-main--com-detalhe {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-6);
+  max-width: calc(var(--content-max) + 360px + var(--sp-6));
+}
+.app-main-conteudo { flex: 1; min-width: 0; }
+.app-main-detalhe {
+  flex: 0 0 360px;
+  width: 360px;
+  position: sticky;
+  top: var(--sp-6);
+  max-height: calc(100vh - var(--sp-6) * 2);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+@media (max-width: 900px) {
+  .app-main--com-detalhe { flex-direction: column; }
+  .app-main-detalhe { width: 100%; flex-basis: auto; position: static; max-height: none; }
+}
+
 .app-titulo {
   font-size: var(--fs-h1);
   font-weight: var(--fw-semibold);
