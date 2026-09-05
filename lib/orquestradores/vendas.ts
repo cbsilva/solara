@@ -32,6 +32,20 @@ export async function orquestradorVendas(cod_pedido: string) {
 
   const pedido = pedidosData[0]
 
+  const { data: clienteData } = await supabase
+    .from('clientes')
+    .select()
+    .eq('cod_cliente', pedido.cod_cliente)
+    .single()
+
+  const cliente: ClienteInfo = {
+    cod_cliente: pedido.cod_cliente,
+    nome: clienteData?.nome || pedido.cod_cliente,
+    segmento: clienteData?.segmento || 'N/A',
+    condicao_pagamento_dias: clienteData?.condicao_pagamento_dias || 30,
+    desconto_maximo_pct: clienteData?.desconto_maximo_pct || 5,
+  }
+
   // Atualizar para processando
   await supabase
     .from('pedidos_orcamento')
@@ -68,9 +82,9 @@ export async function orquestradorVendas(cod_pedido: string) {
         mensagem: pedido.mensagem,
         canal: pedido.canal,
         cliente: {
-          cod_cliente: pedido.cod_cliente,
-          nome: pedido.cliente_nome,
-          segmento: pedido.cliente_segmento,
+          cod_cliente: cliente.cod_cliente,
+          nome: cliente.nome,
+          segmento: cliente.segmento,
         },
       },
       {
@@ -108,20 +122,6 @@ export async function orquestradorVendas(cod_pedido: string) {
     }
 
     // 3. PESQUISADOR - Consultas em código (sem modelo)
-    const { data: clienteData } = await supabase
-      .from('clientes')
-      .select()
-      .eq('cod_cliente', pedido.cod_cliente)
-      .single()
-
-    const cliente: ClienteInfo = {
-      cod_cliente: pedido.cod_cliente,
-      nome: pedido.cliente_nome || clienteData?.nome || pedido.cod_cliente,
-      segmento: pedido.cliente_segmento || clienteData?.segmento || 'N/A',
-      condicao_pagamento_dias: clienteData?.condicao_pagamento_dias || 30,
-      desconto_maximo_pct: clienteData?.desconto_maximo_pct || 5,
-    }
-
     // Buscar pedidos anteriores (últimos 30 dias)
     const dataHoje = new Date()
     const data30DiasAtras = new Date(dataHoje.getTime() - 30 * 24 * 60 * 60 * 1000)

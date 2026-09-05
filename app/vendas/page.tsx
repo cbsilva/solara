@@ -12,7 +12,6 @@ import { Icon } from '@/components/Icon'
 interface PedidoOrcamento {
   cod_pedido: string
   cod_cliente: string
-  cliente_nome: string
   mensagem: string
   canal: string
   data: string
@@ -105,7 +104,6 @@ export default function VendasPage() {
     const { error } = await supabase.from('pedidos_orcamento').insert({
       cod_pedido: proximo,
       cod_cliente: novoCliente,
-      cliente_nome: clientes[novoCliente],
       canal: novoCanal,
       mensagem: novaMensagem,
       status: 'novo',
@@ -117,6 +115,8 @@ export default function VendasPage() {
       setNovoCanal('email')
       setMostraForm(false)
       await buscarPedidos()
+    } else {
+      setAlerta({ tipo: 'erro', mensagem: error.message || 'Erro ao criar pedido' })
     }
   }
 
