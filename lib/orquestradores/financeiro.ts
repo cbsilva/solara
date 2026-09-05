@@ -89,6 +89,7 @@ export async function orquestradorFinanceiro(extrato_id: string) {
         'investigador',
         {
           divergencia: {
+            id: div.id,
             valor_lancamento: div.valor_lancamento,
             valor_titulo: div.valor_titulo,
             tipo_inicial: div.tipo_inicial,
@@ -103,7 +104,7 @@ export async function orquestradorFinanceiro(extrato_id: string) {
         {
           area: 'financeiro',
           item_tipo: 'divergencia',
-          item_id: `${extrato_id}-${div.id}`,
+          item_id: extrato_id,
           chamado_por: orquestradorId,
         }
       )

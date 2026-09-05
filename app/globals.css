@@ -858,6 +858,14 @@ textarea.input { height: auto; padding: var(--sp-3); resize: vertical; min-heigh
   transition: background var(--t);
 }
 .org-haste.is-reprovado { background: var(--danger); }
+.org-seta-h {
+  align-self: center;
+  width: var(--sp-4);
+  height: 2px;
+  background: var(--border-strong);
+  transition: background var(--t);
+}
+.org-seta-h.is-reprovado { background: var(--danger); }
 .org-cartao {
   min-width: 132px;
   padding: var(--sp-3) var(--sp-4);

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Execucao {
@@ -21,7 +21,7 @@ const AGENTES_POR_AREA: Record<string, string[]> = {
 }
 
 export function Organograma({ area, item_id }: { area: string; item_id: string }) {
-  const [execucoes, setExecucoes] = useState<Record<string, Execucao>>({})
+  const [execucoesPorAgente, setExecucoesPorAgente] = useState<Record<string, Execucao[]>>({})
   const [orquestrador, setOrquestrador] = useState<Execucao | null>(null)
   const [revisorReprovouAte, setRevisorReprovouAte] = useState(0)
 
@@ -35,14 +35,14 @@ export function Organograma({ area, item_id }: { area: string; item_id: string }
         .eq('item_id', item_id)
         .order('inicio', { ascending: true })
       if (!data) return
-      const mapa: Record<string, Execucao> = {}
+      const porAgente: Record<string, Execucao[]> = {}
       let orch: Execucao | null = null
       for (const exec of data) {
         if (exec.agente === 'orquestrador') orch = exec
-        else mapa[exec.agente] = exec
+        else porAgente[exec.agente] = [...(porAgente[exec.agente] || []), exec]
       }
       setOrquestrador(orch)
-      setExecucoes(mapa)
+      setExecucoesPorAgente(porAgente)
     }
 
     buscar()
@@ -57,7 +57,10 @@ export function Organograma({ area, item_id }: { area: string; item_id: string }
           if (exec.agente === 'orquestrador') {
             setOrquestrador(exec)
           } else {
-            setExecucoes((prev) => ({ ...prev, [exec.agente]: exec }))
+            setExecucoesPorAgente((prev) => {
+              const semAntiga = (prev[exec.agente] || []).filter((e) => e.id !== exec.id)
+              return { ...prev, [exec.agente]: [...semAntiga, exec] }
+            })
             if (exec.agente === 'revisor' && exec.saida?.aprovado === false) {
               setRevisorReprovouAte(Date.now() + 3000)
             }
@@ -73,7 +76,7 @@ export function Organograma({ area, item_id }: { area: string; item_id: string }
 
   const agentes = AGENTES_POR_AREA[area] || []
 
-  if (!orquestrador && Object.keys(execucoes).length === 0) {
+  if (!orquestrador && Object.keys(execucoesPorAgente).length === 0) {
     return <p className="estado-vazio">Nenhuma execução ainda. Processe um item para acompanhar aqui.</p>
   }
 
@@ -89,14 +92,22 @@ export function Organograma({ area, item_id }: { area: string; item_id: string }
         <>
           <div className="org-conector" />
           <div className="org-agentes">
-            {agentes.map((agente) => {
-              const exec = execucoes[agente]
+            {agentes.map((agente, idx) => {
+              const execs = execucoesPorAgente[agente] || []
               const setaVermelha = agente === 'revisor' && revisorReprovouAte > Date.now()
+              const conectorRevisorRedator = agente === 'revisor' && agentes[idx - 1] === 'redator'
               return (
-                <div key={agente} className="org-ramo">
-                  <div className={`org-haste ${setaVermelha ? 'is-reprovado' : ''}`} />
-                  {exec ? <CartaoAgente exec={exec} /> : <CartaoVazio agente={agente} />}
-                </div>
+                <Fragment key={agente}>
+                  {conectorRevisorRedator && (
+                    <div className={`org-seta-h ${setaVermelha ? 'is-reprovado' : ''}`} />
+                  )}
+                  <div className="org-ramo">
+                    <div className={`org-haste ${setaVermelha ? 'is-reprovado' : ''}`} />
+                    {execs.length === 0 && <CartaoVazio agente={agente} />}
+                    {execs.length === 1 && <CartaoAgente exec={execs[0]} />}
+                    {execs.length > 1 && <CartaoAgregado agente={agente} execs={execs} />}
+                  </div>
+                </Fragment>
               )
             })}
           </div>
@@ -121,6 +132,19 @@ function CartaoAgente({ exec }: { exec: Execucao }) {
       )}
       {exec.status === 'rodando' && <span className="org-meta">rodando…</span>}
       {exec.status === 'erro' && <span className="org-meta">erro</span>}
+    </div>
+  )
+}
+
+function CartaoAgregado({ agente, execs }: { agente: string; execs: Execucao[] }) {
+  const rodando = execs.filter((e) => e.status === 'rodando').length
+  const concluidos = execs.length - rodando
+  const status = rodando > 0 ? 'rodando' : execs.some((e) => e.status === 'erro') ? 'erro' : 'ok'
+
+  return (
+    <div className={`org-cartao org-cartao--${status}`}>
+      <span className="org-nome">{agente}</span>
+      <span className="org-meta">{rodando} rodando / {concluidos} concluídos</span>
     </div>
   )
 }

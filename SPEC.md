@@ -48,6 +48,18 @@ Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em 
 ### 2.3 Admin (`/admin`, só `papel = admin`)
 Tabela de perfis com: e-mail, nome, papel, áreas. Formulário para criar usuário (e-mail, senha inicial, nome, papel, áreas). Usa a service role numa rota de API para criar no Auth e em `perfis`.
 
+### 2.4 Tabela `perfis_usuario` e permissão de uso de agentes
+| coluna | tipo | obs |
+|---|---|---|
+| id | uuid | = auth.users.id |
+| usar_agente | boolean | default false |
+| created_at | timestamptz | default now() |
+| updated_at | timestamptz | default now() |
+
+Controla, por usuário, se ele pode disparar o processamento por agentes (independente do `papel`/`areas` de `perfis`, que controlam acesso à área). Toda rota de API que executa um orquestrador (`POST /api/vendas/processar`, `POST /api/financeiro/conciliar`, `POST /api/rh/processar`) chama `verificarPermissaoAgente` (`lib/verificar-permissao-agente.ts`) antes de rodar; se `usar_agente` for `false` ou a linha não existir, recusa com erro.
+
+Aba **Permissões de Agentes** em `/admin`: lista todos os usuários com um toggle Ativar/Desativar que faz upsert em `perfis_usuario`.
+
 ---
 
 ## 3. Motor
