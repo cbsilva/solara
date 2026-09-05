@@ -28,6 +28,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   const [itens, setItens] = useState<Aprovacao[]>([])
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [propostaEditada, setPropostaEditada] = useState('')
+  const [respostaEditada, setRespostaEditada] = useState('')
   const [observacao, setObservacao] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [soPendentes, setSoPendentes] = useState(true)
@@ -59,6 +60,11 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   }, [area, soPendentes])
 
   const item = selecionado ? itens.find((i) => i.id === selecionado) : null
+  const temResposta = typeof item?.proposta?.resposta === 'string'
+  const triagemItens: any[] = item?.proposta?.triagem?.itens || []
+  const itensNaoAtendidos: any[] = (item?.proposta?.contexto?.itens || [])
+    .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
+    .filter((it: any) => it.existe === false)
 
   // Reflete a decisão no item de origem (SPEC 4.3 / 6.4). 1:1 apenas para
   // `pedido` e `faixa`; `divergencia` fica a cargo do fluxo de Financeiro.
@@ -91,12 +97,16 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       decidido_em: new Date().toISOString(),
     }
     if (editada) {
-      try {
-        patch.proposta = JSON.parse(propostaEditada)
-      } catch {
-        alert('A proposta editada não é um JSON válido.')
-        setSalvando(false)
-        return
+      if (temResposta) {
+        patch.proposta = { ...item.proposta, resposta: respostaEditada }
+      } else {
+        try {
+          patch.proposta = JSON.parse(propostaEditada)
+        } catch {
+          alert('A proposta editada não é um JSON válido.')
+          setSalvando(false)
+          return
+        }
       }
     }
     const { error } = await supabase.from('aprovacoes').update(patch).eq('id', id)
@@ -104,6 +114,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       await aplicarDecisaoNoItem(item, 'aprovada')
       setSelecionado(null)
       setPropostaEditada('')
+      setRespostaEditada('')
     }
     setSalvando(false)
   }
@@ -129,6 +140,8 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       await aplicarDecisaoNoItem(item, 'rejeitada')
       setSelecionado(null)
       setObservacao('')
+      setPropostaEditada('')
+      setRespostaEditada('')
     }
     setSalvando(false)
   }
@@ -152,6 +165,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
             onClick={() => {
               setSelecionado(it.id)
               setPropostaEditada(JSON.stringify(it.proposta, null, 2))
+              setRespostaEditada(typeof it.proposta?.resposta === 'string' ? it.proposta.resposta : '')
               setObservacao('')
             }}
           >
@@ -170,15 +184,49 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
           <>
             <h3>{item.titulo}</h3>
 
-            <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
-              <label>Proposta</label>
-              <textarea
-                className="input"
-                style={{ minHeight: 220, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}
-                value={propostaEditada}
-                onChange={(e) => setPropostaEditada(e.target.value)}
-              />
-            </div>
+            {itensNaoAtendidos.length > 0 && (
+              <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-4)' }}>
+                <Icon type="alerta" size="sm" />
+                <span>
+                  <strong>Não vendemos:</strong>{' '}
+                  {itensNaoAtendidos
+                    .map((it) => it.descricao_cliente || it.descricao || it.cod_produto || 'item não identificado')
+                    .join(', ')}{' '}
+                  — confira a resposta antes de aprovar.
+                </span>
+              </div>
+            )}
+
+            {temResposta ? (
+              <>
+                <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+                  <label>Resposta ao cliente</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 240, whiteSpace: 'pre-wrap' }}
+                    value={respostaEditada}
+                    onChange={(e) => setRespostaEditada(e.target.value)}
+                  />
+                </div>
+
+                <details style={{ marginTop: 'var(--sp-3)' }}>
+                  <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
+                    Dados completos (triagem, contexto, revisão)
+                  </summary>
+                  <pre className="preview" style={{ marginTop: 'var(--sp-2)' }}>{propostaEditada}</pre>
+                </details>
+              </>
+            ) : (
+              <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+                <label>Proposta</label>
+                <textarea
+                  className="input"
+                  style={{ minHeight: 220, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}
+                  value={propostaEditada}
+                  onChange={(e) => setPropostaEditada(e.target.value)}
+                />
+              </div>
+            )}
 
             {item.status === 'pendente' ? (
               <>
