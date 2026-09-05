@@ -5,6 +5,58 @@ export interface LinhaLancamento {
   tipo: 'credito' | 'debito'
 }
 
+export interface TituloBruto {
+  cod_titulo: string
+  cod_cliente: string
+  nota_fiscal?: string
+  valor: number
+  vencimento: string
+  status: string
+}
+
+// Le um CSV de titulos enviado pelo usuario (SPEC 5.3: "Se o usuario subiu
+// titulos, usar esse arquivo; senao, usar a tabela titulos_receber").
+// Mesmas colunas de titulos_receber: cod_titulo, cod_cliente, nota_fiscal,
+// valor, vencimento, status.
+export function limparTitulos(conteudo: string): TituloBruto[] {
+  const linhas = conteudo.split('\n').filter((l) => l.trim())
+  if (linhas.length === 0) return []
+
+  const separador = linhas[0].includes(';') ? ';' : ','
+  const cabecalho = linhas[0].split(separador).map((c) => c.trim().toLowerCase())
+  const idx = (nomes: string[]) => cabecalho.findIndex((c) => nomes.some((n) => c.includes(n)))
+
+  const idxCod = idx(['cod_titulo', 'titulo'])
+  const idxCliente = idx(['cod_cliente', 'cliente'])
+  const idxNota = idx(['nota_fiscal', 'nota', 'nf'])
+  const idxValor = idx(['valor'])
+  const idxVencimento = idx(['vencimento'])
+  const idxStatus = idx(['status'])
+
+  if (idxCod === -1 || idxValor === -1 || idxVencimento === -1) {
+    throw new Error('Arquivo de títulos precisa ter ao menos cod_titulo, valor e vencimento')
+  }
+
+  const resultado: TituloBruto[] = []
+  for (let i = 1; i < linhas.length; i++) {
+    const colunas = linhas[i].split(separador).map((c) => c.trim())
+    if (colunas.length < 2) continue
+    try {
+      resultado.push({
+        cod_titulo: colunas[idxCod],
+        cod_cliente: idxCliente !== -1 ? colunas[idxCliente] : '',
+        nota_fiscal: idxNota !== -1 ? colunas[idxNota] : undefined,
+        valor: converterValor(colunas[idxValor]),
+        vencimento: converterData(colunas[idxVencimento]),
+        status: idxStatus !== -1 ? colunas[idxStatus].toLowerCase() : 'aberto',
+      })
+    } catch {
+      continue
+    }
+  }
+  return resultado
+}
+
 export function limparExtrato(conteudo: string): LinhaLancamento[] {
   // Tentar diferentes encodings se necessário
   let linhas = conteudo.split('\n')

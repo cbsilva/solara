@@ -187,7 +187,9 @@ export async function orquestradorFinanceiro(extrato_id: string) {
     }
 
     // 5. Criar items em aprovacoes (uma por hipótese)
-    for (const hipotese of hipoteses) {
+    for (let i = 0; i < hipoteses.length; i++) {
+      const hipotese = hipoteses[i]
+      const divergencia = divergencias[i]
       const titulo_aprovacao = `${hipotese.hipotese} · ${hipotese.acao_sugerida} · R$ ${hipotese.valor_a_baixar}`
 
       await supabase.from('aprovacoes').insert({
@@ -196,6 +198,7 @@ export async function orquestradorFinanceiro(extrato_id: string) {
         item_id: extrato_id,
         titulo: titulo_aprovacao,
         proposta: {
+          divergencia_id: divergencia.id,
           hipotese,
           relatorio: consolidacao.relatorio_markdown,
           revisao,

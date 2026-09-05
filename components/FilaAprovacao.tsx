@@ -66,8 +66,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
     .filter((it: any) => it.existe === false)
 
-  // Reflete a decisão no item de origem (SPEC 4.3 / 6.4). 1:1 apenas para
-  // `pedido` e `faixa`; `divergencia` fica a cargo do fluxo de Financeiro.
+  // Reflete a decisão no item de origem (SPEC 4.3 / 6.4 / 5.5).
   const aplicarDecisaoNoItem = async (it: Aprovacao, decisao: 'aprovada' | 'rejeitada') => {
     const supabase = createClient()
     if (it.item_tipo === 'pedido') {
@@ -84,6 +83,28 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
             : { status: 'rejeitada' }
         )
         .eq('id_faixa', it.item_id)
+    } else if (it.item_tipo === 'divergencia') {
+      const divergenciaId = it.proposta?.divergencia_id
+      if (divergenciaId) {
+        await supabase
+          .from('divergencias')
+          .update({ status: decisao === 'aprovada' ? 'resolvida' : 'nova' })
+          .eq('id', divergenciaId)
+      }
+
+      const hipotese = it.proposta?.hipotese
+      if (decisao === 'aprovada' && hipotese?.cod_titulos_envolvidos?.length) {
+        const status =
+          hipotese.hipotese === 'vencido_sem_pagamento'
+            ? 'vencido'
+            : Number(hipotese.valor_pendente) > 0
+              ? 'pago_parcial'
+              : 'pago'
+        await supabase
+          .from('titulos_receber')
+          .update({ status })
+          .in('cod_titulo', hipotese.cod_titulos_envolvidos)
+      }
     }
   }
 
@@ -91,6 +112,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     if (!item) return
     setSalvando(true)
     const supabase = createClient()
+    let propostaFinal = item.proposta
     const patch: Record<string, any> = {
       status: editada ? 'editada' : 'aprovada',
       decidido_por: usuarioId,
@@ -98,20 +120,21 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     }
     if (editada) {
       if (temResposta) {
-        patch.proposta = { ...item.proposta, resposta: respostaEditada }
+        propostaFinal = { ...item.proposta, resposta: respostaEditada }
       } else {
         try {
-          patch.proposta = JSON.parse(propostaEditada)
+          propostaFinal = JSON.parse(propostaEditada)
         } catch {
           alert('A proposta editada não é um JSON válido.')
           setSalvando(false)
           return
         }
       }
+      patch.proposta = propostaFinal
     }
     const { error } = await supabase.from('aprovacoes').update(patch).eq('id', id)
     if (!error) {
-      await aplicarDecisaoNoItem(item, 'aprovada')
+      await aplicarDecisaoNoItem({ ...item, proposta: propostaFinal }, 'aprovada')
       setSelecionado(null)
       setPropostaEditada('')
       setRespostaEditada('')

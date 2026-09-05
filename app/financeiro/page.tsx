@@ -7,7 +7,7 @@ import { Organograma } from '@/components/Organograma'
 import { FilaAprovacao } from '@/components/FilaAprovacao'
 import { Header } from '@/components/Header'
 import { Icon } from '@/components/Icon'
-import { limparExtrato } from '@/lib/financeiro/limpar'
+import { limparExtrato, limparTitulos } from '@/lib/financeiro/limpar'
 import { casarLancamentos } from '@/lib/financeiro/casar'
 
 interface Lancamento {
@@ -78,20 +78,28 @@ export default function FinanceiroPage() {
       const lancamentos = limparExtrato(texto)
 
       const supabase = createClient()
-      const { data: titulos } = await supabase
-        .from('titulos_receber')
-        .select('cod_titulo, cod_cliente, valor, vencimento, status, nota_fiscal')
 
-      const { lancamentos: processados, divergencias } = casarLancamentos(
-        lancamentos,
-        titulos?.map((t: any) => ({
+      // SPEC 5.3: se o usuário subiu títulos, usar esse arquivo; senão, usar titulos_receber
+      let titulosParaCasar
+      if (arquivoTitulos) {
+        titulosParaCasar = limparTitulos(await arquivoTitulos.text())
+      } else {
+        const { data: titulos } = await supabase
+          .from('titulos_receber')
+          .select('cod_titulo, cod_cliente, valor, vencimento, status, nota_fiscal')
+        titulosParaCasar = (titulos || []).map((t: any) => ({
           cod_titulo: t.cod_titulo,
           cod_cliente: t.cod_cliente,
           valor: t.valor,
           vencimento: t.vencimento,
           status: t.status,
           nota_fiscal: t.nota_fiscal,
-        })) || []
+        }))
+      }
+
+      const { lancamentos: processados, divergencias } = casarLancamentos(
+        lancamentos,
+        titulosParaCasar
       )
 
       const { data: novoExtrato } = await supabase
@@ -108,28 +116,38 @@ export default function FinanceiroPage() {
 
       if (!novoExtrato) throw new Error('Erro ao criar extrato')
 
-      await supabase.from('lancamentos').insert(
-        processados.map((l) => ({
-          extrato_id: novoExtrato.id,
-          data: l.data,
-          descricao: l.descricao,
-          valor: l.valor,
-          tipo: l.tipo,
-          cod_titulo_casado: l.cod_titulo_casado || null,
-          situacao: l.situacao,
-        }))
-      )
+      const { data: lancamentosInseridos } = await supabase
+        .from('lancamentos')
+        .insert(
+          processados.map((l) => ({
+            extrato_id: novoExtrato.id,
+            data: l.data,
+            descricao: l.descricao,
+            valor: l.valor,
+            tipo: l.tipo,
+            cod_titulo_casado: l.cod_titulo_casado || null,
+            situacao: l.situacao,
+          }))
+        )
+        .select()
 
+      // `processados` e `lancamentosInseridos` estao na mesma ordem do insert;
+      // `d.lancamento` e a mesma referencia de objeto que um item de `processados`,
+      // entao achamos o indice pra ligar a divergencia ao lancamento gravado.
       await supabase.from('divergencias').insert(
-        divergencias.map((d) => ({
-          extrato_id: novoExtrato.id,
-          tipo_inicial: d.tipo_inicial,
-          lancamento_id: null,
-          cod_titulo: d.cod_titulo || null,
-          valor_lancamento: d.lancamento.valor,
-          valor_titulo: null,
-          status: 'nova',
-        }))
+        divergencias.map((d) => {
+          const idx = processados.indexOf(d.lancamento)
+          const lancamentoId = idx !== -1 ? lancamentosInseridos?.[idx]?.id : null
+          return {
+            extrato_id: novoExtrato.id,
+            tipo_inicial: d.tipo_inicial,
+            lancamento_id: lancamentoId || null,
+            cod_titulo: d.cod_titulo || null,
+            valor_lancamento: d.lancamento.valor,
+            valor_titulo: d.valor_titulo ?? null,
+            status: 'nova',
+          }
+        })
       )
 
       setExtratoId(novoExtrato.id)
@@ -274,25 +292,49 @@ export default function FinanceiroPage() {
   )
 }
 
+const DIVERGENCIA_COLUNAS = ['nova', 'investigando', 'aguardando_aprovacao', 'resolvida'] as const
+
+const DIVERGENCIA_META: Record<string, { rotulo: string; ponto: string }> = {
+  nova: { rotulo: 'Nova', ponto: 'var(--info)' },
+  investigando: { rotulo: 'Investigando', ponto: 'var(--warning)' },
+  aguardando_aprovacao: { rotulo: 'Aguardando aprovação', ponto: 'var(--accent)' },
+  resolvida: { rotulo: 'Resolvida', ponto: 'var(--success)' },
+}
+
 function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
   const [lancamentos, setLancamentos] = useState<any[]>([])
   const [divergencias, setDivergencias] = useState<any[]>([])
   const [processando, setProcessando] = useState(false)
 
+  const buscar = async () => {
+    const supabase = createClient()
+    const { data: l } = await supabase.from('lancamentos').select().eq('extrato_id', extrato_id)
+    const { data: d } = await supabase.from('divergencias').select().eq('extrato_id', extrato_id)
+    setLancamentos(l || [])
+    setDivergencias(d || [])
+  }
+
   useEffect(() => {
-    const buscar = async () => {
-      const supabase = createClient()
-      const { data: l } = await supabase.from('lancamentos').select().eq('extrato_id', extrato_id)
-      const { data: d } = await supabase.from('divergencias').select().eq('extrato_id', extrato_id)
-      setLancamentos(l || [])
-      setDivergencias(d || [])
-    }
     buscar()
+
+    const supabase = createClient()
+    const canal = supabase
+      .channel(`divergencias-${extrato_id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'divergencias', filter: `extrato_id=eq.${extrato_id}` },
+        () => buscar()
+      )
+      .subscribe()
+    return () => { canal.unsubscribe() }
   }, [extrato_id])
 
   const casados = lancamentos.filter((l) => l.situacao === 'casado')
-  const divergentes = divergencias.filter((d) => d.status !== 'resolvida')
   const ignorados = lancamentos.filter((l) => l.situacao === 'ignorado')
+  const porStatus = DIVERGENCIA_COLUNAS.reduce((acc, s) => {
+    acc[s] = divergencias.filter((d) => d.status === s)
+    return acc
+  }, {} as Record<string, any[]>)
 
   const investigar = async () => {
     setProcessando(true)
@@ -311,57 +353,72 @@ function ResultadoLancamentos({ extrato_id }: { extrato_id: string }) {
   }
 
   return (
-    <div className="resultado-grade">
-      <div className="card resultado-card">
-        <div className="card-body">
-          <span className="badge badge--success">Bateram · {casados.length}</span>
-          <p className="resultado-valor" style={{ color: 'var(--success-text)' }}>
-            {brl(casados.reduce((s, l) => s + l.valor, 0))}
-          </p>
-          <ul className="resultado-lista">
-            {casados.map((l) => (
-              <li key={l.id}>
-                <span>{l.data} · {l.descricao.slice(0, 28)}</span>
-                <span className="num">{brl(l.valor)}</span>
-              </li>
-            ))}
-          </ul>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
+      <div className="resultado-grade" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+        <div className="card resultado-card">
+          <div className="card-body">
+            <span className="badge badge--success">Bateram · {casados.length}</span>
+            <p className="resultado-valor" style={{ color: 'var(--success-text)' }}>
+              {brl(casados.reduce((s, l) => s + l.valor, 0))}
+            </p>
+            <ul className="resultado-lista">
+              {casados.map((l) => (
+                <li key={l.id}>
+                  <span>{l.data} · {l.descricao.slice(0, 28)}</span>
+                  <span className="num">{brl(l.valor)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="card resultado-card">
+          <div className="card-body">
+            <span className="badge badge--neutral">Ignorados · {ignorados.length}</span>
+            <p className="resultado-valor" style={{ color: 'var(--text-faint)' }}>
+              {brl(ignorados.reduce((s, l) => s + l.valor, 0))}
+            </p>
+            <p className="app-subtitulo">Débitos não processados na conciliação.</p>
+          </div>
         </div>
       </div>
 
-      <div className="card resultado-card">
-        <div className="card-body">
-          <span className="badge badge--warning">Divergências · {divergentes.length}</span>
-          <p className="resultado-valor" style={{ color: 'var(--warning-text)' }}>
-            {brl(divergentes.reduce((s, d) => s + (d.valor_lancamento || 0), 0))}
-          </p>
+      <div>
+        <div className="tela-cabecalho" style={{ marginBottom: 'var(--sp-3)' }}>
+          <h3>Divergências</h3>
           <button
             type="button"
-            className="btn btn--primary btn--sm btn--block"
+            className="btn btn--primary btn--sm"
             onClick={investigar}
-            disabled={processando || divergentes.length === 0}
+            disabled={processando || porStatus.nova.length === 0}
           >
             {processando ? <span className="spinner" /> : <Icon type="assistente" size="sm" />}
-            {processando ? 'Investigando…' : 'Investigar'}
+            {processando ? 'Investigando…' : `Investigar ${porStatus.nova.length || ''}`.trim()}
           </button>
-          <ul className="resultado-lista">
-            {divergentes.map((d) => (
-              <li key={d.id}>
-                <span>{d.tipo_inicial}</span>
-                <span className="num">{brl(d.valor_lancamento || 0)}</span>
-              </li>
-            ))}
-          </ul>
         </div>
-      </div>
 
-      <div className="card resultado-card">
-        <div className="card-body">
-          <span className="badge badge--neutral">Ignorados · {ignorados.length}</span>
-          <p className="resultado-valor" style={{ color: 'var(--text-faint)' }}>
-            {brl(ignorados.reduce((s, l) => s + l.valor, 0))}
-          </p>
-          <p className="app-subtitulo">Débitos não processados na conciliação.</p>
+        <div className="kanban">
+          {DIVERGENCIA_COLUNAS.map((status) => (
+            <div key={status} className="coluna">
+              <div className="coluna-head">
+                <span className="ponto" style={{ background: DIVERGENCIA_META[status].ponto }} />
+                {DIVERGENCIA_META[status].rotulo}
+                <span className="conta">{porStatus[status].length}</span>
+              </div>
+
+              {porStatus[status].map((d) => (
+                <div key={d.id} className="cartao">
+                  <div className="cartao-codigo">{d.tipo_inicial || 'divergência'}</div>
+                  {d.cod_titulo && <div className="cartao-linha">Título {d.cod_titulo}</div>}
+                  <div className="cartao-linha">{brl(d.valor_lancamento || 0)}</div>
+                </div>
+              ))}
+
+              {porStatus[status].length === 0 && (
+                <p className="estado-vazio" style={{ padding: 'var(--sp-6) 0' }}>Nenhuma</p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
