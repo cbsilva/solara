@@ -13,6 +13,7 @@ interface ProdutoCandidat {
   cod_produto: string
   descricao: string
   preco: number
+  preco_acima_100: number
   estoque: number
   prazo_reposicao: number
 }
@@ -42,7 +43,7 @@ export async function orquestradorVendas(cod_pedido: string) {
     cod_cliente: pedido.cod_cliente,
     nome: clienteData?.nome || pedido.cod_cliente,
     segmento: clienteData?.segmento || 'N/A',
-    condicao_pagamento_dias: clienteData?.condicao_pagamento_dias || 30,
+    condicao_pagamento_dias: clienteData?.prazo_pagamento_dias || 30,
     desconto_maximo_pct: clienteData?.desconto_maximo_pct || 5,
   }
 
@@ -121,45 +122,52 @@ export async function orquestradorVendas(cod_pedido: string) {
       return
     }
 
-    // 3. PESQUISADOR - Consultas em código (sem modelo)
-    // Buscar pedidos anteriores (últimos 30 dias)
-    const dataHoje = new Date()
-    const data30DiasAtras = new Date(dataHoje.getTime() - 30 * 24 * 60 * 60 * 1000)
+    // 3. PESQUISADOR - Consultas em código (sem modelo), em paralelo
 
-    const { data: pedidosAnteriores } = await supabase
-      .from('pedidos_orcamento')
-      .select()
-      .eq('cod_cliente', pedido.cod_cliente)
-      .gte('data', data30DiasAtras.toISOString())
-      .neq('cod_pedido', cod_pedido)
+    // Catálogo: para cada item do Triador, busca em produtos por similaridade de descrição
+    const buscarCandidatosCatalogo = async () => {
+      const resultado: Record<string, ProdutoCandidat[]> = {}
+      for (const item of triagem.itens) {
+        const palavras = item.descricao_cliente
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((p: string) => p.length > 2)
 
-    // Buscar candidatos para cada item (similaridade de descrição)
-    const candidatos_catalogo: Record<string, ProdutoCandidat[]> = {}
+        let query = supabase.from('produtos').select()
+        for (const palavra of palavras.slice(0, 2)) {
+          query = query.ilike('descricao', `%${palavra}%`)
+        }
+        const { data: produtos } = await query.limit(5)
 
-    for (const item of triagem.itens) {
-      const palavras = item.descricao_cliente
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((p: string) => p.length > 2)
-
-      let query = supabase.from('produtos').select()
-
-      for (const palavra of palavras.slice(0, 2)) {
-        query = query.ilike('descricao', `%${palavra}%`)
-      }
-
-      const { data: produtos } = await query.limit(5)
-
-      candidatos_catalogo[item.descricao_cliente] = (produtos || []).map(
-        (p: any) => ({
+        resultado[item.descricao_cliente] = (produtos || []).map((p: any) => ({
           cod_produto: p.cod_produto,
           descricao: p.descricao,
-          preco: p.preco,
+          preco: p.preco_unitario,
+          preco_acima_100: p.preco_acima_100_un,
           estoque: p.estoque,
-          prazo_reposicao: p.prazo_reposicao || 0,
-        })
-      )
+          prazo_reposicao: p.prazo_reposicao_dias || 0,
+        }))
+      }
+      return resultado
     }
+
+    // Cliente: pedidos anteriores do mesmo cliente nos últimos 30 dias
+    const buscarPedidosAnteriores = async () => {
+      const dataHoje = new Date()
+      const data30DiasAtras = new Date(dataHoje.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const { data } = await supabase
+        .from('pedidos_orcamento')
+        .select()
+        .eq('cod_cliente', pedido.cod_cliente)
+        .gte('data', data30DiasAtras.toISOString())
+        .neq('cod_pedido', cod_pedido)
+      return data || []
+    }
+
+    const [candidatos_catalogo, pedidosAnteriores] = await Promise.all([
+      buscarCandidatosCatalogo(),
+      buscarPedidosAnteriores(),
+    ])
 
     // Chamar pesquisador
     const pesquisaResult = await agente(
