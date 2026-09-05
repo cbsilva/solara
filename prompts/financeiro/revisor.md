@@ -21,6 +21,8 @@ Se tudo OK, aprove. Se houver problemas, liste os motivos para o Consolidador re
 
 ## Saida
 
+Responda apenas com o JSON pedido abaixo — nenhum texto antes ou depois, sem mostrar sua analise passo a passo, sem tabelas de verificacao em prosa. So o JSON final.
+
 Se APROVADO:
 
 ```json

@@ -21,6 +21,8 @@ Confira a proposta contra as regras. Se estiver tudo dentro dos limites, aprove.
 
 ## Saida
 
+Responda apenas com o JSON pedido abaixo — nenhum texto antes ou depois, sem mostrar sua analise passo a passo. So o JSON final.
+
 Se aprovado:
 
 {
