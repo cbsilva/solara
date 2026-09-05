@@ -49,6 +49,17 @@ export default function FinanceiroPage() {
         router.push('/')
         return
       }
+
+      // Retoma o ultimo extrato importado, ja que extratoId so vive no estado
+      // do componente e some ao sair/voltar da tela.
+      const { data: ultimoExtrato } = await supabase
+        .from('extratos_importados')
+        .select('id')
+        .order('importado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (ultimoExtrato) setExtratoId(ultimoExtrato.id)
+
       setCarregando(false)
     }
     verificar()
