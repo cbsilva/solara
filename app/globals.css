@@ -1025,3 +1025,10 @@ textarea.input { height: auto; padding: var(--sp-3); resize: vertical; min-heigh
   gap: var(--sp-2);
   margin-top: var(--sp-4);
 }
+.fila-meta-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}

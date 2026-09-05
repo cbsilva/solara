@@ -29,6 +29,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [propostaEditada, setPropostaEditada] = useState('')
   const [respostaEditada, setRespostaEditada] = useState('')
+  const [explicacaoEditada, setExplicacaoEditada] = useState('')
+  const [valorABaixarEditado, setValorABaixarEditado] = useState('')
+  const [valorPendenteEditado, setValorPendenteEditado] = useState('')
   const [observacao, setObservacao] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [soPendentes, setSoPendentes] = useState(true)
@@ -65,6 +68,10 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   const itensNaoAtendidos: any[] = (item?.proposta?.contexto?.itens || [])
     .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
     .filter((it: any) => it.existe === false)
+
+  const hipotese = item?.item_tipo === 'divergencia' ? item?.proposta?.hipotese : null
+  const temHipotese = !!hipotese
+  const confiancaBaixa = temHipotese && typeof hipotese.confianca === 'number' && hipotese.confianca < 0.6
 
   // Reflete a decisão no item de origem (SPEC 4.3 / 6.4 / 5.5).
   const aplicarDecisaoNoItem = async (it: Aprovacao, decisao: 'aprovada' | 'rejeitada') => {
@@ -121,6 +128,23 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     if (editada) {
       if (temResposta) {
         propostaFinal = { ...item.proposta, resposta: respostaEditada }
+      } else if (temHipotese) {
+        const valor_a_baixar = Number(valorABaixarEditado)
+        const valor_pendente = Number(valorPendenteEditado)
+        if (isNaN(valor_a_baixar) || isNaN(valor_pendente)) {
+          alert('Valor a baixar e valor pendente precisam ser números válidos.')
+          setSalvando(false)
+          return
+        }
+        propostaFinal = {
+          ...item.proposta,
+          hipotese: {
+            ...item.proposta.hipotese,
+            explicacao: explicacaoEditada,
+            valor_a_baixar,
+            valor_pendente,
+          },
+        }
       } else {
         try {
           propostaFinal = JSON.parse(propostaEditada)
@@ -138,6 +162,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       setSelecionado(null)
       setPropostaEditada('')
       setRespostaEditada('')
+      setExplicacaoEditada('')
+      setValorABaixarEditado('')
+      setValorPendenteEditado('')
     }
     setSalvando(false)
   }
@@ -165,6 +192,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       setObservacao('')
       setPropostaEditada('')
       setRespostaEditada('')
+      setExplicacaoEditada('')
+      setValorABaixarEditado('')
+      setValorPendenteEditado('')
     }
     setSalvando(false)
   }
@@ -189,6 +219,10 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
               setSelecionado(it.id)
               setPropostaEditada(JSON.stringify(it.proposta, null, 2))
               setRespostaEditada(typeof it.proposta?.resposta === 'string' ? it.proposta.resposta : '')
+              const hip = it.item_tipo === 'divergencia' ? it.proposta?.hipotese : null
+              setExplicacaoEditada(hip?.explicacao || '')
+              setValorABaixarEditado(hip?.valor_a_baixar != null ? String(hip.valor_a_baixar) : '')
+              setValorPendenteEditado(hip?.valor_pendente != null ? String(hip.valor_pendente) : '')
               setObservacao('')
             }}
           >
@@ -235,6 +269,64 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
                 <details style={{ marginTop: 'var(--sp-3)' }}>
                   <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
                     Dados completos (triagem, contexto, revisão)
+                  </summary>
+                  <pre className="preview" style={{ marginTop: 'var(--sp-2)' }}>{propostaEditada}</pre>
+                </details>
+              </>
+            ) : temHipotese ? (
+              <>
+                {confiancaBaixa && (
+                  <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-4)' }}>
+                    <Icon type="alerta" size="sm" />
+                    <span>
+                      <strong>Confiança baixa</strong> ({Math.round(hipotese.confianca * 100)}%) — confira os dados antes de aprovar.
+                    </span>
+                  </div>
+                )}
+
+                <div className="fila-meta-grade" style={{ marginTop: 'var(--sp-4)' }}>
+                  <div><span className="rotulo-mini">Hipótese</span><br />{hipotese.hipotese}</div>
+                  <div><span className="rotulo-mini">Ação sugerida</span><br />{hipotese.acao_sugerida || '—'}</div>
+                  <div><span className="rotulo-mini">Confiança</span><br />{hipotese.confianca != null ? `${Math.round(hipotese.confianca * 100)}%` : '—'}</div>
+                  <div><span className="rotulo-mini">Títulos envolvidos</span><br />{(hipotese.cod_titulos_envolvidos || []).join(', ') || '—'}</div>
+                </div>
+
+                <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+                  <label>Explicação</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 140, whiteSpace: 'pre-wrap' }}
+                    value={explicacaoEditada}
+                    onChange={(e) => setExplicacaoEditada(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-grade" style={{ marginTop: 'var(--sp-4)' }}>
+                  <div className="field">
+                    <label>Valor a baixar (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input"
+                      value={valorABaixarEditado}
+                      onChange={(e) => setValorABaixarEditado(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Valor pendente (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input"
+                      value={valorPendenteEditado}
+                      onChange={(e) => setValorPendenteEditado(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <details style={{ marginTop: 'var(--sp-3)' }}>
+                  <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
+                    Dados completos (relatório, revisão)
                   </summary>
                   <pre className="preview" style={{ marginTop: 'var(--sp-2)' }}>{propostaEditada}</pre>
                 </details>
