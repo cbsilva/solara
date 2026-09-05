@@ -68,29 +68,36 @@ a { color: inherit; }
   .app-main { padding: var(--sp-4); }
 }
 
-/* Tela com painel de detalhe ao lado (ex.: execuções do item selecionado) */
-.app-main--com-detalhe {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-6);
-  max-width: calc(var(--content-max) + 360px + var(--sp-6));
-}
-.app-main-conteudo { flex: 1; min-width: 0; }
+/* Tela com painel de detalhe fixo ao lado (ex.: execuções do item selecionado).
+   position: fixed (nao sticky) para nunca se mover ao rolar a pagina; o
+   conteudo reserva espaco a direita via padding para nao ficar por baixo. */
+.app-main--com-detalhe { padding-right: calc(360px + var(--sp-6) * 2); }
 .app-main-detalhe {
-  flex: 0 0 360px;
+  position: fixed;
+  top: calc(var(--header-h) + var(--sp-5));
+  bottom: var(--sp-5);
+  right: var(--sp-6);
   width: 360px;
-  position: sticky;
-  top: var(--sp-6);
-  max-height: calc(100vh - var(--sp-6) * 2);
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
 }
 @media (max-width: 900px) {
-  .app-main--com-detalhe { flex-direction: column; }
-  .app-main-detalhe { width: 100%; flex-basis: auto; position: static; max-height: none; }
+  .app-main--com-detalhe { padding-right: var(--sp-6); }
+  .app-main-detalhe {
+    position: static;
+    width: 100%;
+    top: auto;
+    bottom: auto;
+    right: auto;
+    margin-top: var(--sp-6);
+  }
+}
+@media (max-width: 640px) {
+  .app-main--com-detalhe { padding-right: var(--sp-4); }
 }
 
 .app-titulo {
