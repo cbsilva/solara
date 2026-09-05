@@ -16,6 +16,61 @@ interface Titulo {
   status: string
 }
 
+// Tamanho do lote de hipoteses por chamada ao Consolidador. O relatorio
+// completo (varias divergencias, cada uma com tabela/explicacao) facilmente
+// passa de max_tokens=2000 numa chamada so; em vez de aumentar max_tokens
+// (fixo no SPEC), o Consolidador roda em paralelo sobre lotes pequenos e o
+// relatorio final e montado em codigo, concatenando os trechos.
+const LOTE_CONSOLIDADOR = 3
+
+async function consolidarEmLotes(
+  hipoteses: any[],
+  resumo_casamento: { qtd_casados: number; valor_casado: number; qtd_divergencias: number; valor_divergente: number },
+  extrato_id: string,
+  orquestradorId: string,
+  ajustes?: string[]
+): Promise<{ relatorio_markdown: string; acoes: any[] }> {
+  const lotes: any[][] = []
+  for (let i = 0; i < hipoteses.length; i += LOTE_CONSOLIDADOR) {
+    lotes.push(hipoteses.slice(i, i + LOTE_CONSOLIDADOR))
+  }
+
+  const resultados = await Promise.all(
+    lotes.map((lote) =>
+      agente(
+        'consolidador',
+        {
+          resumo_casamento,
+          hipoteses: lote,
+          ...(ajustes ? { ajustes } : {}),
+        },
+        {
+          area: 'financeiro',
+          item_tipo: 'divergencia',
+          item_id: extrato_id,
+          chamado_por: orquestradorId,
+        }
+      )
+    )
+  )
+
+  const cabecalho =
+    `## Resumo da conciliação\n\n` +
+    `| Indicador | Quantidade | Valor |\n|---|---|---|\n` +
+    `| Casados | ${resumo_casamento.qtd_casados} | R$ ${resumo_casamento.valor_casado.toFixed(2)} |\n` +
+    `| Divergências | ${resumo_casamento.qtd_divergencias} | R$ ${resumo_casamento.valor_divergente.toFixed(2)} |`
+
+  const trechos = resultados.map((r) => r.saida.relatorio_trecho as string)
+  const acoes = resultados
+    .flatMap((r) => (r.saida.acoes as any[]) || [])
+    .map((acao, idx) => ({ ordem: idx + 1, ...acao }))
+
+  return {
+    relatorio_markdown: [cabecalho, ...trechos].join('\n\n---\n\n'),
+    acoes,
+  }
+}
+
 export async function orquestradorFinanceiro(extrato_id: string) {
   const supabase = createServerClient()
 
@@ -121,26 +176,14 @@ export async function orquestradorFinanceiro(extrato_id: string) {
         ?.filter((l) => l.situacao === 'casado')
         .reduce((sum, l) => sum + (l.valor || 0), 0) || 0
 
-    const consolidadorResult = await agente(
-      'consolidador',
-      {
-        resumo_casamento: {
-          qtd_casados,
-          valor_casado,
-          qtd_divergencias: divergencias.length,
-          valor_divergente: divergencias.reduce((sum, d) => sum + (d.valor_lancamento || 0), 0),
-        },
-        hipoteses,
-      },
-      {
-        area: 'financeiro',
-        item_tipo: 'divergencia',
-        item_id: extrato_id,
-        chamado_por: orquestradorId,
-      }
-    )
+    const resumo_casamento = {
+      qtd_casados,
+      valor_casado,
+      qtd_divergencias: divergencias.length,
+      valor_divergente: divergencias.reduce((sum, d) => sum + (d.valor_lancamento || 0), 0),
+    }
 
-    let consolidacao = consolidadorResult.saida
+    let consolidacao = await consolidarEmLotes(hipoteses, resumo_casamento, extrato_id, orquestradorId)
     let revisao = null
 
     // 4. REVISOR
@@ -163,27 +206,13 @@ export async function orquestradorFinanceiro(extrato_id: string) {
 
     // Se reprovado, refazer Consolidador uma vez
     if (!revisao.aprovado) {
-      const consolidadorResult2 = await agente(
-        'consolidador',
-        {
-          resumo_casamento: {
-            qtd_casados,
-            valor_casado,
-            qtd_divergencias: divergencias.length,
-            valor_divergente: divergencias.reduce((sum, d) => sum + (d.valor_lancamento || 0), 0),
-          },
-          hipoteses,
-          ajustes: revisao.motivos,
-        },
-        {
-          area: 'financeiro',
-          item_tipo: 'divergencia',
-          item_id: extrato_id,
-          chamado_por: orquestradorId,
-        }
+      consolidacao = await consolidarEmLotes(
+        hipoteses,
+        resumo_casamento,
+        extrato_id,
+        orquestradorId,
+        revisao.motivos
       )
-
-      consolidacao = consolidadorResult2.saida
     }
 
     // 5. Criar items em aprovacoes (uma por hipótese)
