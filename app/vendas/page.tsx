@@ -172,6 +172,7 @@ export default function VendasPage() {
             padding: 'var(--sp-4)',
             marginBottom: 'var(--sp-4)',
             borderRadius: 'var(--br)',
+            textAlign: 'center',
             background: alerta.tipo === 'aviso' ? 'var(--warning-bg)' : 'var(--danger-bg)',
             color: alerta.tipo === 'aviso' ? 'var(--warning-text)' : 'var(--danger-text)',
             border: `1px solid ${alerta.tipo === 'aviso' ? 'var(--warning)' : 'var(--danger)'}`,
