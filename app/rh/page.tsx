@@ -233,7 +233,8 @@ export default function RhPage() {
     <div className="pagina-app">
       <Header contexto="Recursos Humanos" usuarioEmail={user?.email} mostraInicio mostraLogout />
 
-      <main className="app-main">
+      <main className={`app-main ${faixaSel ? 'app-main--com-detalhe' : ''}`}>
+      <div className="app-main-conteudo">
         <div className="tela-cabecalho">
           <div>
             <h1 className="app-titulo">Recursos Humanos</h1>
@@ -447,13 +448,11 @@ export default function RhPage() {
             {user && <FilaAprovacao area="rh" usuarioId={user.id} />}
           </div>
         )}
-      </main>
+      </div>
 
-      {/* Painel lateral */}
-      {faixaSel && (
-        <>
-          <div className="drawer-scrim" onClick={() => setSelecionada(null)} />
-          <aside className="drawer">
+        {/* Painel lateral de execuções — ao lado, sem escurecer o resto da tela */}
+        {faixaSel && (
+          <aside className="app-main-detalhe">
             <div className="drawer-head">
               <div>
                 <h3 style={{ fontFamily: 'var(--font-mono)' }}>{faixaSel.id_faixa}</h3>
@@ -465,8 +464,8 @@ export default function RhPage() {
             </div>
             <LinhaDoTempo item_id={faixaSel.id_faixa} />
           </aside>
-        </>
-      )}
+        )}
+      </main>
     </div>
   )
 }
