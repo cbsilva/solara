@@ -2,7 +2,7 @@
 
 Avaliação do código em `main` na data desta análise, contra `PRD.md` e `SPEC.md`. Achados em ordem de gravidade.
 
-**Atualização:** os itens 1–7, 9 e 10 foram corrigidos (commits `2c040d9` e a migração `habilitar_rls_com_politicas` no Supabase). Detalhe da postura atual em `SPEC.md`, seção 8. Os itens 8 (CVE em `next`/`postcss`) e 11 (CSRF explícito) seguem em aberto — ver observação em cada um.
+**Atualização:** os itens 1–10 foram corrigidos (commits `2c040d9`, `3e4c9f6` e a migração `habilitar_rls_com_politicas` no Supabase). Detalhe da postura atual em `SPEC.md`, seção 8. Só o item 11 (CSRF explícito) segue em aberto — risco baixo, ver observação no item.
 
 ---
 
@@ -123,7 +123,9 @@ Mesmo padrão existe em `prompts/financeiro/*.md` (hipótese do Investigador) e 
 
 ---
 
-### 8. Dependência `next` (via `postcss`) com vulnerabilidade conhecida
+### 8. Dependência `next` (via `postcss`) com vulnerabilidade conhecida — ✅ CORRIGIDO
+
+Atualizado para `next@16.3.4` numa branch separada (`upgrade/next-16`), testado numa worktree isolada (typecheck, build de produção com as 14 rotas, smoke test em runtime numa porta separada — páginas e checagens de autenticação das rotas de API continuam idênticas) e só então mesclado na `main` (commit `3e4c9f6`). `npm audit` agora reporta 0 vulnerabilidades. Efeito colateral tratado: o Next 16 injeta um bloco de instruções pra agentes de IA em `CLAUDE.md` a cada `next dev` — desativado via `agentRules: false` em `next.config.js`, já que este projeto mantém `CLAUDE.md` como as regras da casa.
 
 **Onde:** `package.json:15` (`"next": "^15.0.0"`, resolvendo para uma versão que depende de `postcss <=8.5.22`).
 
@@ -194,9 +196,9 @@ Limite de 5MB adicionado no navegador (`app/financeiro/page.tsx`) e na rota `/ap
 | 5 | Alto | Rotas de processar não checam área, só `usar_agente` | ✅ Corrigido |
 | 6 | Alto | Importação/casamento do extrato roda no navegador, sem rota de API nem checagem de área | ✅ Corrigido |
 | 7 | Médio | Prompt injection sem barreira nos prompts nem validação determinística das regras de negócio críticas | ✅ Corrigido |
-| 8 | Médio | `next`/`postcss` com CVE conhecida (`npm audit`) | ⏳ Em aberto (breaking change) |
+| 8 | Médio | `next`/`postcss` com CVE conhecida (`npm audit`) | ✅ Corrigido |
 | 9 | Médio | Upload de extrato sem limite de tamanho | ✅ Corrigido |
 | 10 | Baixo | Fallback latin-1 do SPEC 5.3 não implementado | ✅ Corrigido |
 | 11 | Baixo | Sem proteção CSRF explícita (mitigado por `SameSite`) | ⏳ Em aberto (risco baixo) |
 
-Restam em aberto só os itens 8 e 11, ambos de baixo/médio risco prático e com trade-offs que exigem decisão explícita (upgrade major do Next, escopo de proteção CSRF).
+Resta em aberto só o item 11, de risco baixo (mitigado pelo `SameSite` padrão dos cookies do Supabase) e que exige decisão de escopo antes de implementar.
