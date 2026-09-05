@@ -1,14 +1,13 @@
 import { orquestradorVendas } from '@/lib/orquestradores/vendas'
 import { verificarPermissaoAgente } from '@/lib/verificar-permissao-agente'
-import { createServerClient } from '@/lib/supabase/server'
+import { getUsuarioAutenticado } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await getUsuarioAutenticado()
 
     if (!user) {
       return NextResponse.json(
