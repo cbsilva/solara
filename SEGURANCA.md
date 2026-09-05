@@ -1,12 +1,16 @@
 # Avaliação de Segurança — Solara OS
 
-Avaliação do código em `main` na data desta análise, contra `PRD.md` e `SPEC.md`. Nenhuma correção foi aplicada — só diagnóstico. Achados em ordem de gravidade.
+Avaliação do código em `main` na data desta análise, contra `PRD.md` e `SPEC.md`. Achados em ordem de gravidade.
+
+**Atualização:** os itens 1–7, 9 e 10 foram corrigidos (commits `2c040d9` e a migração `habilitar_rls_com_politicas` no Supabase). Detalhe da postura atual em `SPEC.md`, seção 8. Os itens 8 (CVE em `next`/`postcss`) e 11 (CSRF explícito) seguem em aberto — ver observação em cada um.
 
 ---
 
 ## CRÍTICO
 
-### 1. RLS desligado nas 14 tabelas do banco — qualquer usuário logado pode ler/escrever qualquer linha, inclusive `perfis` (auto-promoção a admin)
+### 1. RLS desligado nas 14 tabelas do banco — qualquer usuário logado pode ler/escrever qualquer linha, inclusive `perfis` (auto-promoção a admin) — ✅ CORRIGIDO
+
+RLS habilitado nas 14 tabelas com políticas por área (`eh_admin()`, `tem_area(area)`). Testado: chave publicável sem login agora lê 0 linhas de `perfis`/`pedidos_orcamento`; service role continua com acesso total. Detalhe das políticas em `SPEC.md` §8.
 
 **Onde:** todas as tabelas do schema `public` no Supabase (`clientes`, `produtos`, `extrato_bancario`, `pedidos_orcamento`, `titulos_receber`, `perfis`, `execucoes_agentes`, `aprovacoes`, `colaboradores`, `faixas_salariais`, `perfis_usuario`, `extratos_importados`, `lancamentos`, `divergencias`). Confirmado via `list_tables` do Supabase: RLS `disabled` em todas.
 
@@ -27,7 +31,9 @@ await supabase.from('perfis').update({ papel: 'admin', areas: ['vendas','finance
 
 ---
 
-### 2. `/api/admin/criar-usuario` — sem nenhuma verificação de autenticação ou papel
+### 2. `/api/admin/criar-usuario` — sem nenhuma verificação de autenticação ou papel — ✅ CORRIGIDO
+
+Adicionada checagem de sessão + `papel === 'admin'` (`lib/verificar-admin.ts`) no início do handler. Testado: requisição sem sessão agora responde 401.
 
 **Onde:** `app/api/admin/criar-usuario/route.ts`, arquivo inteiro (linhas 1–71). O handler `POST` vai direto de `req.json()` (linha 6) para `supabase.auth.admin.createUser(...)` (linha 26) usando a service role (linha 24) — não há nenhuma chamada a `getUsuarioAutenticado`, nenhuma checagem de sessão, nenhuma checagem de `papel === 'admin'`.
 
@@ -44,7 +50,9 @@ e criar uma conta admin própria, sem precisar de nenhuma credencial válida. É
 
 ---
 
-### 3. `/api/admin/editar-usuario` — sem nenhuma verificação de autenticação ou papel
+### 3. `/api/admin/editar-usuario` — sem nenhuma verificação de autenticação ou papel — ✅ CORRIGIDO
+
+Mesma correção do item 2. Testado: requisição sem sessão agora responde 401.
 
 **Onde:** `app/api/admin/editar-usuario/route.ts`, arquivo inteiro (linhas 1–32). O handler `PUT` atualiza `perfis.papel` e `perfis.areas` (linhas 17–20) para qualquer `id` recebido no corpo, sem checar quem está chamando.
 
@@ -54,7 +62,9 @@ e criar uma conta admin própria, sem precisar de nenhuma credencial válida. É
 
 ---
 
-### 4. `/api/admin/listar-usuarios` — sem nenhuma verificação de autenticação, expõe todos os e-mails da empresa
+### 4. `/api/admin/listar-usuarios` — sem nenhuma verificação de autenticação, expõe todos os e-mails da empresa — ✅ CORRIGIDO
+
+Mesma correção do item 2. Testado: requisição sem sessão agora responde 401.
 
 **Onde:** `app/api/admin/listar-usuarios/route.ts`, arquivo inteiro (linhas 1–37). `GET` chama `supabase.auth.admin.listUsers()` (linha 9) com service role e devolve a lista completa de e-mails (linha 23–29) sem checar sessão nem papel.
 
@@ -66,7 +76,9 @@ e criar uma conta admin própria, sem precisar de nenhuma credencial válida. É
 
 ## ALTO
 
-### 5. Rotas de processar checam autenticação e a permissão de "usar agente", mas não checam se o usuário tem a área
+### 5. Rotas de processar checam autenticação e a permissão de "usar agente", mas não checam se o usuário tem a área — ✅ CORRIGIDO
+
+Adicionada `verificarArea(user.id, <area>)` (`lib/verificar-area.ts`) nas 3 rotas, antes de `verificarPermissaoAgente`.
 
 **Onde:**
 - `app/api/vendas/processar/route.ts:10-19`
@@ -81,7 +93,9 @@ Todas seguem o mesmo padrão: `getUsuarioAutenticado()` (401 se não logado) →
 
 ---
 
-### 6. Conciliação bancária roda inteiramente no navegador e escreve direto no banco com a chave pública — sem rota de API, sem checagem de área
+### 6. Conciliação bancária roda inteiramente no navegador e escreve direto no banco com a chave pública — sem rota de API, sem checagem de área — ✅ CORRIGIDO
+
+Criada `POST /api/financeiro/importar` (sessão + área `financeiro` + service role). `app/financeiro/page.tsx` agora só gera o preview "antes e depois" no navegador (leitura, sem gravar) e envia o texto dos arquivos para a rota.
 
 **Onde:** `app/financeiro/page.tsx`, função `conciliar()` (linhas ~75–150). `limparExtrato`, `casarLancamentos`, e os `insert` em `extratos_importados`, `lancamentos` e `divergencias` rodam todos no componente `'use client'`, usando `createClient()` (chave publicável) — não existe uma rota `/api/financeiro/importar` ou similar.
 
@@ -93,7 +107,9 @@ Todas seguem o mesmo padrão: `getUsuarioAutenticado()` (401 se não logado) →
 
 ## MÉDIO
 
-### 7. Prompt injection: texto livre do cliente vira o turno inteiro do usuário para o Triador, sem nenhuma barreira de "isto é dado, não instrução"
+### 7. Prompt injection: texto livre do cliente vira o turno inteiro do usuário para o Triador, sem nenhuma barreira de "isto é dado, não instrução" — ✅ CORRIGIDO
+
+Adicionada instrução explícita nos prompts de `triador` (vendas, rh) e `investigador` (financeiro) tratando o texto livre como dado, nunca instrução. Adicionada validação determinística de preço/desconto/estoque em `lib/orquestradores/vendas.ts` (compara `contexto.itens` contra `produtos` reais e `cliente.desconto_maximo_pct` antes de criar a aprovação) — não depende só do julgamento do modelo para essas regras. Motivos de reprovação agora aparecem em destaque na fila de aprovação.
 
 **Onde:** `lib/agente.ts:68-73` — `content: JSON.stringify(entrada)` é o **único** conteúdo do turno `user` enviado à API da Anthropic; `entrada` inclui `pedidos_orcamento.mensagem`, texto digitado livremente pelo cliente (via `app/vendas/page.tsx`, formulário "Novo pedido") ou importado de um CSV externo. Nenhum dos prompts em `prompts/vendas/*.md` instrui o modelo a tratar esse campo como dado a classificar, nunca como instrução a seguir.
 
@@ -113,7 +129,9 @@ Mesmo padrão existe em `prompts/financeiro/*.md` (hipótese do Investigador) e 
 
 **Por que é risco:** `npm audit` reporta 2 avisos nessa cadeia — 1 **high** (XSS via `</style>` não escapado na saída do PostCSS) e 1 **moderate** (leitura arbitrária de arquivo via `sourceMappingURL` controlado pelo atacante em comentários CSS). Ambos afetam principalmente builds que processam CSS de fontes não confiáveis — o risco prático aqui é menor porque o CSS do projeto é todo autoral (`app/globals.css`), mas é uma vulnerabilidade conhecida e catalogada (GHSA) numa dependência de produção.
 
-**Como corrigir:** `npm audit fix --force` resolve, mas troca para `next@16.3.4` — uma mudança de major version que precisa ser testada (breaking change), não algo pra rodar às cegas antes de um deploy.
+**Status:** não corrigido de propósito — `npm audit fix --force` resolve, mas troca para `next@16.3.4` (breaking change). Precisa de decisão e teste dedicados, não é algo pra rodar às cegas junto com o resto.
+
+**Como corrigir:** `npm audit fix --force`, depois testar a aplicação inteira antes de subir.
 
 ```
 2 vulnerabilities (1 moderate, 1 high)
@@ -121,7 +139,9 @@ Mesmo padrão existe em `prompts/financeiro/*.md` (hipótese do Investigador) e 
 
 ---
 
-### 9. Upload do extrato sem limite de tamanho — processa qualquer CSV inteiro no navegador, sem nenhum teto
+### 9. Upload do extrato sem limite de tamanho — processa qualquer CSV inteiro no navegador, sem nenhum teto — ✅ CORRIGIDO
+
+Limite de 5MB adicionado no navegador (`app/financeiro/page.tsx`) e na rota `/api/financeiro/importar`.
 
 **Onde:** `app/financeiro/page.tsx`, `uploadExtrato` (linha ~57) e `conciliar` (linha ~70) chamam `arquivoExtrato.text()` e depois `limparExtrato`/`casarLancamentos` (`lib/financeiro/limpar.ts`, `lib/financeiro/casar.ts`) sem checar `file.size` antes. O `<input type="file">` (linha ~205) não tem atributo de tamanho máximo.
 
@@ -133,7 +153,9 @@ Mesmo padrão existe em `prompts/financeiro/*.md` (hipótese do Investigador) e 
 
 ## BAIXO
 
-### 10. `lib/financeiro/limpar.ts` não implementa o fallback para latin-1 que o SPEC 5.3 pede
+### 10. `lib/financeiro/limpar.ts` não implementa o fallback para latin-1 que o SPEC 5.3 pede — ✅ CORRIGIDO
+
+`lerArquivoTexto` (`app/financeiro/page.tsx`) lê o arquivo como bytes, tenta utf-8 e recai para `windows-1252` se aparecer caractere de substituição.
 
 **Onde:** `lib/financeiro/limpar.ts`, função `limparExtrato` (linha 8 em diante). O SPEC (seção 5.3) pede "ler latin-1 se utf-8 falhar"; o código sempre lê o arquivo como utf-8 (via `File.text()` no chamador) e não tem nenhuma detecção/reprocessamento em latin-1.
 
@@ -163,18 +185,18 @@ Mesmo padrão existe em `prompts/financeiro/*.md` (hipótese do Investigador) e 
 
 ## Resumo
 
-| # | Severidade | Item |
-|---|---|---|
-| 1 | Crítico | RLS desligado em todas as tabelas — auto-promoção a admin via escrita direta em `perfis` |
-| 2 | Crítico | `/api/admin/criar-usuario` sem autenticação |
-| 3 | Crítico | `/api/admin/editar-usuario` sem autenticação |
-| 4 | Crítico | `/api/admin/listar-usuarios` sem autenticação |
-| 5 | Alto | Rotas de processar não checam área, só `usar_agente` |
-| 6 | Alto | Importação/casamento do extrato roda no navegador, sem rota de API nem checagem de área |
-| 7 | Médio | Prompt injection sem barreira nos prompts nem validação determinística das regras de negócio críticas |
-| 8 | Médio | `next`/`postcss` com CVE conhecida (`npm audit`) |
-| 9 | Médio | Upload de extrato sem limite de tamanho |
-| 10 | Baixo | Fallback latin-1 do SPEC 5.3 não implementado |
-| 11 | Baixo | Sem proteção CSRF explícita (mitigado por `SameSite`) |
+| # | Severidade | Item | Status |
+|---|---|---|---|
+| 1 | Crítico | RLS desligado em todas as tabelas — auto-promoção a admin via escrita direta em `perfis` | ✅ Corrigido |
+| 2 | Crítico | `/api/admin/criar-usuario` sem autenticação | ✅ Corrigido |
+| 3 | Crítico | `/api/admin/editar-usuario` sem autenticação | ✅ Corrigido |
+| 4 | Crítico | `/api/admin/listar-usuarios` sem autenticação | ✅ Corrigido |
+| 5 | Alto | Rotas de processar não checam área, só `usar_agente` | ✅ Corrigido |
+| 6 | Alto | Importação/casamento do extrato roda no navegador, sem rota de API nem checagem de área | ✅ Corrigido |
+| 7 | Médio | Prompt injection sem barreira nos prompts nem validação determinística das regras de negócio críticas | ✅ Corrigido |
+| 8 | Médio | `next`/`postcss` com CVE conhecida (`npm audit`) | ⏳ Em aberto (breaking change) |
+| 9 | Médio | Upload de extrato sem limite de tamanho | ✅ Corrigido |
+| 10 | Baixo | Fallback latin-1 do SPEC 5.3 não implementado | ✅ Corrigido |
+| 11 | Baixo | Sem proteção CSRF explícita (mitigado por `SameSite`) | ⏳ Em aberto (risco baixo) |
 
-Os itens 1–4 tornam qualquer outro controle do sistema decorativo — são o ponto de partida óbvio antes de qualquer deploy fora do ambiente de aula.
+Restam em aberto só os itens 8 e 11, ambos de baixo/médio risco prático e com trade-offs que exigem decisão explícita (upgrade major do Next, escopo de proteção CSRF).

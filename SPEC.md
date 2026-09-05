@@ -48,6 +48,8 @@ Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em 
 ### 2.3 Admin (`/admin`, só `papel = admin`)
 Tabela de perfis com: e-mail, nome, papel, áreas. Formulário para criar usuário (e-mail, senha inicial, nome, papel, áreas). Usa a service role numa rota de API para criar no Auth e em `perfis`.
 
+As rotas `POST /api/admin/criar-usuario`, `PUT /api/admin/editar-usuario` e `GET /api/admin/listar-usuarios` exigem sessão válida **e** `perfis.papel = 'admin'` do chamador (`lib/verificar-admin.ts`) — verificado no servidor, não só escondido na tela.
+
 ### 2.4 Tabela `perfis_usuario` e permissão de uso de agentes
 | coluna | tipo | obs |
 |---|---|---|
@@ -148,7 +150,7 @@ Layout em duas partes:
 O kanban se atualiza por Realtime na tabela `pedidos_orcamento`.
 
 ### 4.2 Rota de API `POST /api/vendas/processar` (body: `{ cod_pedido }`)
-`export const maxDuration = 60`. Executa o orquestrador de Vendas (`lib/orquestradores/vendas.ts`):
+`export const maxDuration = 60`. Exige sessão válida, `vendas` em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`). Executa o orquestrador de Vendas (`lib/orquestradores/vendas.ts`):
 
 1. Atualiza pedido para `processando`. Cria a execução raiz `orquestrador`.
 2. **Triador**: entrada `{ mensagem, canal, cliente: {cod_cliente, nome, segmento} }`. Saída esperada (definida no prompt): `{ tipo, itens: [{descricao_cliente, quantidade, unidade}], prazo_desejado, pede_desconto, urgencia, observacoes }`. `tipo` é um de `orcamento`, `complemento`, `reclamacao`, `fora_do_ramo`, `spam`, `outro`.
@@ -160,6 +162,7 @@ O kanban se atualiza por Realtime na tabela `pedidos_orcamento`.
 4. **Redator**: entrada `{ triagem, contexto, cliente }`. Saída `{ resposta, resumo }`. A resposta é o texto que a Marcela enviaria.
 5. **Revisor**: entrada `{ resposta, contexto, regras }` onde `regras` vem do prompt. Saída `{ aprovado, motivos: [] }`.
    - Se `aprovado = false`: chama o Redator de novo com `{ ...entrada_anterior, ajustes: motivos }` e o Revisor de novo. No máximo 2 voltas. Se ainda reprovar, segue para a fila com os motivos anexados.
+   - Depois da última volta, uma checagem determinística em código (não pelo modelo) confere `contexto.itens[].preco_aplicado` contra o preço real em `produtos` (respeitando a faixa de quantidade > 100) e o desconto implícito contra `cliente.desconto_maximo_pct`, e `atende_estoque` contra o estoque real. Se algo não bater, força `revisao.aprovado = false` e anexa o motivo — regra de negócio com impacto financeiro não fica só a critério do modelo.
 6. Cria item em `aprovacoes` com `titulo = "<cliente> · <resumo>"`, `proposta = { resposta, triagem, contexto, revisao }`. Pedido vai para `aguardando_aprovacao`. Fecha a execução raiz.
 
 ### 4.3 Decisão na fila
@@ -178,7 +181,7 @@ Rota: `/financeiro`. Só para usuários com `financeiro` em `perfis.areas`.
 
 ### 5.2 Tela
 - Em cima: `Organograma` da conciliação corrente.
-- Bloco **Importar**: upload do extrato (obrigatório) e dos títulos (opcional). Aceita CSV limpo ou bruto. Depois do upload mostra **antes e depois**: as 6 primeiras linhas do arquivo como veio e as 6 primeiras linhas normalizadas, lado a lado.
+- Bloco **Importar**: upload do extrato (obrigatório) e dos títulos (opcional). Aceita CSV limpo ou bruto. Depois do upload mostra **antes e depois**: as 6 primeiras linhas do arquivo como veio e as 6 primeiras linhas normalizadas, lado a lado. O "antes e depois" é gerado no navegador (só leitura, sem gravar nada); o texto dos arquivos (máx. 5MB cada) é enviado para `POST /api/financeiro/importar`, que exige sessão válida e `financeiro` em `perfis.areas`, faz a limpeza/casamento e grava `extratos_importados`/`lancamentos`/`divergencias` com a service role — não é mais escrito direto do navegador.
 - Botão **Conciliar**.
 - Resultado em três listas: Bateram (verde), Divergências (kanban com colunas `nova`, `investigando`, `aguardando_aprovacao`, `resolvida`), Ignorados (débitos).
 - Aba **Relatório** com o texto do Consolidador.
@@ -200,11 +203,11 @@ Débitos: `ignorado`.
 Depois do casamento, todo título em aberto com vencimento anterior à data final do extrato e sem lançamento casado vira divergência `vencido_sem_pagamento`.
 
 ### 5.4 Rota `POST /api/financeiro/conciliar` (body `{ extrato_id }`)
-`maxDuration = 60`. Orquestrador `lib/orquestradores/financeiro.ts`:
+`maxDuration = 60`. Exige sessão válida, `financeiro` em `perfis.areas` e `usar_agente = true`. Orquestrador `lib/orquestradores/financeiro.ts`:
 1. Cria execução raiz. Divergências vão para `investigando`.
 2. **Investigador**, um por divergência, todos em `Promise.all`. Entrada: `{ divergencia, lancamento, titulos_candidatos }` onde candidatos são os títulos do mesmo cliente (se identificável pela descrição) ou de valor próximo (±10%), com vencimento a até 30 dias. Saída `{ hipotese, explicacao, confianca (0-1), acao_sugerida, cod_titulos_envolvidos: [], valor_a_baixar, valor_pendente }`. `hipotese` é um de: `pagamento_parcial`, `dois_titulos_um_pagamento`, `duplicidade`, `diferenca_centavos`, `atraso_com_juros`, `vencido_sem_pagamento`, `deposito_nao_identificado`, `nao_e_titulo`, `outro`.
-3. **Consolidador**: entrada `{ resumo_casamento: {qtd_casados, valor_casado, qtd_divergencias, valor_divergente}, hipoteses: [...] }`. Saída `{ relatorio_markdown, acoes: [] }`.
-4. **Revisor**: entrada `{ hipoteses, titulos_abertos, relatorio }`. Saída `{ aprovado, motivos: [] }`. Confere que todo `cod_titulo` citado existe e que `valor_a_baixar + valor_pendente = valor_titulo` em cada hipótese. Se reprovar, refaz apenas o Consolidador uma vez com os motivos.
+3. **Consolidador**: as hipóteses são divididas em lotes de até 3 (`consolidarEmLotes`) e o Consolidador roda em paralelo sobre cada lote — o relatório completo facilmente passa de `max_tokens = 2000` numa chamada só. Cada lote recebe `{ resumo_casamento, hipoteses: <lote>, ajustes? }` e devolve `{ relatorio_trecho, acoes: [] }` (sem repetir o resumo executivo). O relatório final é o resumo (montado em código a partir de `resumo_casamento`) seguido da concatenação dos trechos; as ações de todos os lotes são mescladas e renumeradas.
+4. **Revisor**: entrada `{ hipoteses, titulos_abertos, relatorio }`. Saída `{ aprovado, motivos: [] }`. Confere que todo `cod_titulo` citado existe e que `valor_a_baixar + valor_pendente = valor_titulo` em cada hipótese. Se reprovar, refaz todos os lotes do Consolidador uma vez com os motivos.
 5. Cada hipótese vira um item em `aprovacoes` (`item_tipo = divergencia`, `titulo = "<hipotese> · <cliente ou descrição> · R$ <valor>"`). Divergências vão para `aguardando_aprovacao`. Fecha a execução raiz.
 
 ### 5.5 Decisão na fila
@@ -234,7 +237,7 @@ O kanban se atualiza por Realtime na tabela `faixas_salariais`.
 `Organograma` desenha, para `rh`: triador, pesquisador, redator, revisor (mesmo conjunto de Vendas).
 
 ### 6.3 Rota de API `POST /api/rh/processar` (body: `{ id_faixa }`)
-`export const maxDuration = 60`. Executa o orquestrador de RH (`lib/orquestradores/rh.ts`):
+`export const maxDuration = 60`. Exige sessão válida, `rh` em `perfis.areas` e `usar_agente = true`. Executa o orquestrador de RH (`lib/orquestradores/rh.ts`):
 
 1. Atualiza a faixa para `processando`. Cria a execução raiz `orquestrador`.
 2. **Triador**: entrada `{ justificativa, colaborador: {id_colaborador, nome}, valor_pretendido }`. Saída `{ tipo, resumo_pedido, observacoes }`. `tipo` é um de `alteracao_salarial`, `fora_do_rh`, `spam`, `outro`.
@@ -255,3 +258,16 @@ Aprovar ou editar: faixa vai para `aprovada` e recebe `inicio = hoje` (a vigênc
 
 ## 7. Fora do escopo desta versão
 E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro e Recursos Humanos.
+
+---
+
+## 8. Segurança
+
+Avaliação completa e histórico dos achados em `SEGURANCA.md`. Postura atual:
+
+- **RLS habilitado em todas as 14 tabelas**, com políticas por área (`lib/verificar-area.ts` no código espelha as mesmas regras: `perfis`, `execucoes_agentes`, `aprovacoes`, `pedidos_orcamento`, `clientes`, `produtos`, `titulos_receber`, `extratos_importados`, `lancamentos`, `divergencias`, `colaboradores`, `faixas_salariais` — leitura/escrita só para quem tem a área correspondente em `perfis.areas`; `perfis_usuario` só para `papel = admin`; `extrato_bancario` não é usada pelo app e fica sem política nenhuma). Duas funções auxiliares no banco: `eh_admin()` e `tem_area(area)`.
+- **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
+- **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto financeiro direto (preço, desconto, estoque) em Vendas são conferidas de novo em código (`lib/orquestradores/vendas.ts`) contra os dados reais do catálogo, não dependem só do julgamento do modelo.
+- **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API.
+
+Itens do relatório ainda em aberto (baixa prioridade, ver `SEGURANCA.md`): CVE conhecida em `next`/`postcss` (correção exige upgrade major, não aplicada); proteção CSRF explícita (mitigado hoje pelo `SameSite` padrão dos cookies do Supabase).
