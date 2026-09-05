@@ -1,8 +1,15 @@
-import { createServerClient } from '@/lib/supabase/server'
+import { createServerClient, getUsuarioAutenticado } from '@/lib/supabase/server'
+import { verificarAdmin } from '@/lib/verificar-admin'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
+    const usuario = await getUsuarioAutenticado()
+    if (!usuario) {
+      return NextResponse.json({ erro: 'Usuário não autenticado' }, { status: 401 })
+    }
+    await verificarAdmin(usuario.id)
+
     const supabase = createServerClient()
 
     // Listar todos os usuários do auth
@@ -31,7 +38,7 @@ export async function GET() {
     console.error('Erro ao listar usuários:', err)
     return NextResponse.json(
       { erro: err instanceof Error ? err.message : 'Erro ao listar usuários' },
-      { status: 500 }
+      { status: 403 }
     )
   }
 }

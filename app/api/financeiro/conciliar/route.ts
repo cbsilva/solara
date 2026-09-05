@@ -1,5 +1,6 @@
 import { orquestradorFinanceiro } from '@/lib/orquestradores/financeiro'
 import { verificarPermissaoAgente } from '@/lib/verificar-permissao-agente'
+import { verificarArea } from '@/lib/verificar-area'
 import { getUsuarioAutenticado } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    await verificarArea(user.id, 'financeiro')
     await verificarPermissaoAgente(user.id)
 
     const { extrato_id } = await req.json()

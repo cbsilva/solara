@@ -69,6 +69,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
     .filter((it: any) => it.existe === false)
 
+  const revisaoReprovada = item?.proposta?.revisao?.aprovado === false
+  const motivosRevisao: string[] = item?.proposta?.revisao?.motivos || []
+
   const hipotese = item?.item_tipo === 'divergencia' ? item?.proposta?.hipotese : null
   const temHipotese = !!hipotese
   const confiancaBaixa = temHipotese && typeof hipotese.confianca === 'number' && hipotese.confianca < 0.6
@@ -250,6 +253,16 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
                     .map((it) => it.descricao_cliente || it.descricao || it.cod_produto || 'item não identificado')
                     .join(', ')}{' '}
                   — confira a resposta antes de aprovar.
+                </span>
+              </div>
+            )}
+
+            {revisaoReprovada && (
+              <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-4)' }}>
+                <Icon type="alerta" size="sm" />
+                <span>
+                  <strong>Reprovado na revisão:</strong>{' '}
+                  {motivosRevisao.length > 0 ? motivosRevisao.join(' · ') : 'confira os dados antes de aprovar.'}
                 </span>
               </div>
             )}

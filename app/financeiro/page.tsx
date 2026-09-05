@@ -7,8 +7,7 @@ import { Organograma } from '@/components/Organograma'
 import { FilaAprovacao } from '@/components/FilaAprovacao'
 import { Header } from '@/components/Header'
 import { Icon } from '@/components/Icon'
-import { limparExtrato, limparTitulos } from '@/lib/financeiro/limpar'
-import { casarLancamentos } from '@/lib/financeiro/casar'
+import { limparExtrato } from '@/lib/financeiro/limpar'
 
 interface Lancamento {
   data: string
@@ -19,6 +18,20 @@ interface Lancamento {
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// Mesmo limite aplicado na rota /api/financeiro/importar
+const TAMANHO_MAXIMO_ARQUIVO = 5_000_000
+
+// SPEC 5.3: ler latin-1 se utf-8 falhar. File.text() sempre decodifica como
+// utf-8; lemos como bytes e decodificamos manualmente para poder tentar de novo.
+async function lerArquivoTexto(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer)
+  if (utf8.includes('�')) {
+    return new TextDecoder('windows-1252').decode(buffer)
+  }
+  return utf8
+}
 
 export default function FinanceiroPage() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
@@ -68,8 +81,13 @@ export default function FinanceiroPage() {
   const uploadExtrato = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > TAMANHO_MAXIMO_ARQUIVO) {
+      alert('Arquivo muito grande (máximo 5MB).')
+      e.target.value = ''
+      return
+    }
     setArquivoExtrato(file)
-    const texto = await file.text()
+    const texto = await lerArquivoTexto(file)
     setLinhasAntes(texto.split('\n').slice(0, 6))
     try {
       setLinhasDepois(limparExtrato(texto).slice(0, 6))
@@ -78,90 +96,35 @@ export default function FinanceiroPage() {
     }
   }
 
+  // Limpeza, casamento e gravação agora rodam em /api/financeiro/importar
+  // (servidor), não mais direto do navegador com a chave publicável.
   const conciliar = async () => {
     if (!arquivoExtrato) {
       alert('Selecione o arquivo de extrato')
       return
     }
+    if (arquivoTitulos && arquivoTitulos.size > TAMANHO_MAXIMO_ARQUIVO) {
+      alert('Arquivo de títulos muito grande (máximo 5MB).')
+      return
+    }
     setConciliando(true)
     try {
-      const texto = await arquivoExtrato.text()
-      const lancamentos = limparExtrato(texto)
+      const texto_extrato = await lerArquivoTexto(arquivoExtrato)
+      const texto_titulos = arquivoTitulos ? await lerArquivoTexto(arquivoTitulos) : undefined
 
-      const supabase = createClient()
-
-      // SPEC 5.3: se o usuário subiu títulos, usar esse arquivo; senão, usar titulos_receber
-      let titulosParaCasar
-      if (arquivoTitulos) {
-        titulosParaCasar = limparTitulos(await arquivoTitulos.text())
-      } else {
-        const { data: titulos } = await supabase
-          .from('titulos_receber')
-          .select('cod_titulo, cod_cliente, valor, vencimento, status, nota_fiscal')
-        titulosParaCasar = (titulos || []).map((t: any) => ({
-          cod_titulo: t.cod_titulo,
-          cod_cliente: t.cod_cliente,
-          valor: t.valor,
-          vencimento: t.vencimento,
-          status: t.status,
-          nota_fiscal: t.nota_fiscal,
-        }))
-      }
-
-      const { lancamentos: processados, divergencias } = casarLancamentos(
-        lancamentos,
-        titulosParaCasar
-      )
-
-      const { data: novoExtrato } = await supabase
-        .from('extratos_importados')
-        .insert({
+      const res = await fetch('/api/financeiro/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           nome_arquivo: arquivoExtrato.name,
-          importado_em: new Date().toISOString(),
-          importado_por: user?.id,
-          total_linhas: lancamentos.length,
-          total_creditos: lancamentos.filter((l) => l.tipo === 'credito').reduce((s, l) => s + l.valor, 0),
-        })
-        .select()
-        .single()
+          texto_extrato,
+          texto_titulos,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.erro || 'Erro ao conciliar')
 
-      if (!novoExtrato) throw new Error('Erro ao criar extrato')
-
-      const { data: lancamentosInseridos } = await supabase
-        .from('lancamentos')
-        .insert(
-          processados.map((l) => ({
-            extrato_id: novoExtrato.id,
-            data: l.data,
-            descricao: l.descricao,
-            valor: l.valor,
-            tipo: l.tipo,
-            cod_titulo_casado: l.cod_titulo_casado || null,
-            situacao: l.situacao,
-          }))
-        )
-        .select()
-
-      // `processados` e `lancamentosInseridos` estao na mesma ordem do insert;
-      // `d.lancamento` e a mesma referencia de objeto que um item de `processados`,
-      // entao achamos o indice pra ligar a divergencia ao lancamento gravado.
-      await supabase.from('divergencias').insert(
-        divergencias.map((d) => {
-          const idx = processados.indexOf(d.lancamento)
-          const lancamentoId = idx !== -1 ? lancamentosInseridos?.[idx]?.id : null
-          return {
-            extrato_id: novoExtrato.id,
-            tipo_inicial: d.tipo_inicial,
-            lancamento_id: lancamentoId || null,
-            cod_titulo: d.cod_titulo || null,
-            valor_lancamento: d.lancamento.valor,
-            valor_titulo: d.valor_titulo ?? null,
-            status: 'nova',
-          }
-        })
-      )
-
-      setExtratoId(novoExtrato.id)
+      setExtratoId(data.extrato_id)
       setAba('resultado')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao conciliar')

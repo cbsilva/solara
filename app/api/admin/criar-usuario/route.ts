@@ -1,8 +1,15 @@
-import { createServerClient } from '@/lib/supabase/server'
+import { createServerClient, getUsuarioAutenticado } from '@/lib/supabase/server'
+import { verificarAdmin } from '@/lib/verificar-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
+    const usuario = await getUsuarioAutenticado()
+    if (!usuario) {
+      return NextResponse.json({ erro: 'Usuário não autenticado' }, { status: 401 })
+    }
+    await verificarAdmin(usuario.id)
+
     const { email, senha, nome, papel, areas } = await req.json()
 
     // Validar campos
@@ -64,8 +71,8 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('Erro em criar-usuario:', err)
     return NextResponse.json(
-      { erro: 'Erro ao processar solicitação' },
-      { status: 500 }
+      { erro: err instanceof Error ? err.message : 'Erro ao processar solicitação' },
+      { status: 403 }
     )
   }
 }

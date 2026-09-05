@@ -256,6 +256,45 @@ export async function orquestradorVendas(cod_pedido: string) {
       }
     }
 
+    // 5.1 Validacao deterministica de preco/desconto/estoque. As regras de
+    // negocio com impacto financeiro nao ficam so no julgamento do modelo
+    // (revisor) -- conferimos de novo em codigo contra os dados reais do
+    // catalogo antes de mandar para a fila de aprovacao.
+    const catalogoPorCodigo: Record<string, ProdutoCandidat> = {}
+    for (const lista of Object.values(candidatos_catalogo)) {
+      for (const p of lista) catalogoPorCodigo[p.cod_produto] = p
+    }
+
+    const violacoes: string[] = []
+    for (const item of contexto.itens || []) {
+      if (!item.existe || !item.cod_produto) continue
+      const real = catalogoPorCodigo[item.cod_produto]
+      if (!real) continue
+
+      const precoBase = item.quantidade > 100 ? real.preco_acima_100 : real.preco
+      const precoMinimo = precoBase * (1 - cliente.desconto_maximo_pct / 100)
+
+      if (item.preco_aplicado > precoBase * 1.01) {
+        violacoes.push(
+          `Preço aplicado de ${item.cod_produto} (R$ ${item.preco_aplicado}) é maior que o preço de tabela (R$ ${precoBase.toFixed(2)})`
+        )
+      } else if (item.preco_aplicado < precoMinimo * 0.99) {
+        violacoes.push(
+          `Desconto de ${item.cod_produto} excede o máximo do cliente (${cliente.desconto_maximo_pct}%)`
+        )
+      }
+
+      if (item.atende_estoque && item.quantidade > real.estoque) {
+        violacoes.push(
+          `${item.cod_produto}: promete estoque para ${item.quantidade} un, mas só há ${real.estoque} em estoque`
+        )
+      }
+    }
+
+    if (violacoes.length > 0) {
+      revisao = { aprovado: false, motivos: [...(revisao?.motivos || []), ...violacoes] }
+    }
+
     // 6. Criar item em aprovacoes
     await supabase.from('aprovacoes').insert({
       area: 'vendas',
