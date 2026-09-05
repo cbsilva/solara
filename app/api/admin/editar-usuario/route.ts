@@ -1,9 +1,14 @@
 import { createServerClient, getUsuarioAutenticado } from '@/lib/supabase/server'
 import { verificarAdmin } from '@/lib/verificar-admin'
+import { verificarOrigem } from '@/lib/verificar-origem'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function PUT(req: NextRequest) {
   try {
+    if (!verificarOrigem(req)) {
+      return NextResponse.json({ erro: 'Origem não permitida' }, { status: 403 })
+    }
+
     const usuario = await getUsuarioAutenticado()
     if (!usuario) {
       return NextResponse.json({ erro: 'Usuário não autenticado' }, { status: 401 })

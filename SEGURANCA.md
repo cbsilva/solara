@@ -2,7 +2,7 @@
 
 Avaliação do código em `main` na data desta análise, contra `PRD.md` e `SPEC.md`. Achados em ordem de gravidade.
 
-**Atualização:** os itens 1–10 foram corrigidos (commits `2c040d9`, `3e4c9f6` e a migração `habilitar_rls_com_politicas` no Supabase). Detalhe da postura atual em `SPEC.md`, seção 8. Só o item 11 (CSRF explícito) segue em aberto — risco baixo, ver observação no item.
+**Atualização:** todos os 11 itens foram corrigidos. Detalhe da postura atual em `SPEC.md`, seção 8.
 
 ---
 
@@ -165,7 +165,9 @@ Limite de 5MB adicionado no navegador (`app/financeiro/page.tsx`) e na rota `/ap
 
 **Como corrigir:** ler o arquivo como `ArrayBuffer`, tentar decodificar como utf-8 e, se aparecerem caracteres de substituição (`�`), redecodificar como latin-1 (`TextDecoder('windows-1252')` ou similar) antes de passar para `limparExtrato`.
 
-### 11. Nenhuma proteção CSRF explícita nas rotas `POST`/`PUT`
+### 11. Nenhuma proteção CSRF explícita nas rotas `POST`/`PUT` — ✅ CORRIGIDO
+
+Adicionado `lib/verificar-origem.ts`: confere o header `Origin` (ou `Referer`, fallback) contra a origem da própria requisição, em todas as rotas de mutação. Testado: requisição sem `Origin`/`Referer` e com origem diferente (`http://evil.com`) recebem 403 "Origem não permitida"; com a origem correta, passa normalmente para a checagem de autenticação.
 
 **Onde:** todas as rotas em `app/api/**/route.ts`.
 
@@ -199,6 +201,6 @@ Limite de 5MB adicionado no navegador (`app/financeiro/page.tsx`) e na rota `/ap
 | 8 | Médio | `next`/`postcss` com CVE conhecida (`npm audit`) | ✅ Corrigido |
 | 9 | Médio | Upload de extrato sem limite de tamanho | ✅ Corrigido |
 | 10 | Baixo | Fallback latin-1 do SPEC 5.3 não implementado | ✅ Corrigido |
-| 11 | Baixo | Sem proteção CSRF explícita (mitigado por `SameSite`) | ⏳ Em aberto (risco baixo) |
+| 11 | Baixo | Sem proteção CSRF explícita (mitigado por `SameSite`) | ✅ Corrigido |
 
-Resta em aberto só o item 11, de risco baixo (mitigado pelo `SameSite` padrão dos cookies do Supabase) e que exige decisão de escopo antes de implementar.
+Todos os 11 itens corrigidos.

@@ -1,5 +1,6 @@
 import { createServerClient, getUsuarioAutenticado } from '@/lib/supabase/server'
 import { verificarArea } from '@/lib/verificar-area'
+import { verificarOrigem } from '@/lib/verificar-origem'
 import { limparExtrato, limparTitulos } from '@/lib/financeiro/limpar'
 import { casarLancamentos } from '@/lib/financeiro/casar'
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,6 +12,10 @@ const TAMANHO_MAXIMO = 5_000_000
 
 export async function POST(req: NextRequest) {
   try {
+    if (!verificarOrigem(req)) {
+      return NextResponse.json({ erro: 'Origem não permitida' }, { status: 403 })
+    }
+
     const user = await getUsuarioAutenticado()
     if (!user) {
       return NextResponse.json({ erro: 'Usuário não autenticado' }, { status: 401 })

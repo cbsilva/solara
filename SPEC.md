@@ -269,5 +269,9 @@ Avaliação completa e histórico dos achados em `SEGURANCA.md`. Postura atual:
 - **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
 - **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto financeiro direto (preço, desconto, estoque) em Vendas são conferidas de novo em código (`lib/orquestradores/vendas.ts`) contra os dados reais do catálogo, não dependem só do julgamento do modelo.
 - **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API.
+- **CSRF**: toda rota de mutação (`POST`/`PUT` em `/api/admin/*`, `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`) confere que o header `Origin` (ou `Referer`, como fallback) bate com a própria origem da requisição antes de qualquer outra checagem (`lib/verificar-origem.ts`). Requisição sem os dois headers, ou com origem diferente, recebe 403.
+- **Dependências**: `next` atualizado para `16.3.4` (era `^15.0.0`), `npm audit` sem vulnerabilidades conhecidas.
+
+Não há mais itens em aberto no `SEGURANCA.md`.
 
 Itens do relatório ainda em aberto (baixa prioridade, ver `SEGURANCA.md`): CVE conhecida em `next`/`postcss` (correção exige upgrade major, não aplicada); proteção CSRF explícita (mitigado hoje pelo `SameSite` padrão dos cookies do Supabase).
