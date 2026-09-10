@@ -10,6 +10,20 @@
 -- item_tipo='analise', item_id = id_analise (ex.: AJ001).
 -- ============================================================================
 
+-- ---- Pre-requisito: funcoes de autorizacao (idempotente) -----------------
+-- Repetido aqui para o arquivo rodar sozinho num banco recem-criado. Fonte
+-- canonica: sql/00_funcoes_auth.sql.
+create or replace function eh_admin()
+  returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from perfis where id = auth.uid() and papel = 'admin'); $$;
+
+create or replace function tem_area(area text)
+  returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from perfis where id = auth.uid() and (papel = 'admin' or area = any(areas))); $$;
+
+grant execute on function eh_admin() to anon, authenticated;
+grant execute on function tem_area(text) to anon, authenticated;
+
 -- ---- clausulas_padrao ---------------------------------------------------------
 -- A base juridica da Solara: uma linha por tema, com a posicao que a empresa
 -- aceita, o limite numerico quando houver, se o tema e vetado (nunca passa sem
