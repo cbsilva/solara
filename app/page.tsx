@@ -23,7 +23,7 @@ const AREAS: {
   { id: 'financeiro', nome: 'Financeiro', descricao: 'Conciliar extratos bancários e investigar divergências.', icone: 'cotacoes', ativo: true },
   { id: 'rh', nome: 'RH', descricao: 'Cadastro de colaboradores e aprovação de faixas salariais.', icone: 'usuarios', ativo: true },
   { id: 'juridico', nome: 'Jurídico', descricao: 'Analisar minutas de contrato cláusula a cláusula contra as posições-padrão da Solara.', icone: 'cotacoes', ativo: true },
-  { id: 'operacoes', nome: 'Operações', descricao: 'Em breve.', icone: 'config', ativo: false },
+  { id: 'operacoes', nome: 'Operações', descricao: 'Planejar reposição de estoque: rupturas viram ordens de compra por fornecedor.', icone: 'produtos', ativo: true },
 ]
 
 export default function HomePage() {

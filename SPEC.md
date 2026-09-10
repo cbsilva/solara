@@ -1,6 +1,6 @@
 # SPEC — Solara OS
 
-**O que o construtor precisa saber.** Este documento é lido pelo Claude Code. Cada seção é construída quando a instrução da aula pedir. Os nomes de seção são referenciados nas instruções: Fundação, Casca, Motor, Vendas, Financeiro, RH, Jurídico.
+**O que o construtor precisa saber.** Este documento é lido pelo Claude Code. Cada seção é construída quando a instrução da aula pedir. Os nomes de seção são referenciados nas instruções: Fundação, Casca, Motor, Vendas, Financeiro, RH, Jurídico, Operações.
 
 ---
 
@@ -13,7 +13,7 @@ Duas camadas:
 - **Casca**: login, áreas, administração de usuários.
 - **Motor**: a função `agente()`, o registro de execuções, o organograma em tempo real e a fila de aprovação. O motor é o mesmo para toda área.
 
-Áreas nesta versão: Vendas, Financeiro, RH e Jurídico. Operações aparece no menu como "em breve", desativada.
+Áreas nesta versão: Vendas, Financeiro, RH, Jurídico e Operações.
 
 Stack: Next.js App Router + TypeScript, Supabase (Auth, Postgres, Realtime), API Anthropic, Vercel. Ver CLAUDE.md.
 
@@ -43,7 +43,7 @@ Stack: Next.js App Router + TypeScript, Supabase (Auth, Postgres, Realtime), API
 Ao criar um usuário no Supabase Auth, o admin também cria a linha em `perfis`. Para a aula: o primeiro usuário (o instrutor) é criado direto no painel do Supabase com `papel = admin` e todas as áreas.
 
 ### 2.2 Menu de áreas (`/`)
-Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em `perfis.areas`), RH, Jurídico, Operações (sempre visíveis, marcados "em breve", sem link).
+Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em `perfis.areas`), RH, Jurídico, Operações (ativos, só aparecem se o usuário tem a área em `perfis.areas`). Nenhum "em breve" nesta versão.
 
 ### 2.3 Admin (`/admin`, só `papel = admin`)
 Tabela de perfis com: e-mail, nome, papel, áreas. Formulário para criar usuário (e-mail, senha inicial, nome, papel, áreas). Usa a service role numa rota de API para criar no Auth e em `perfis`.
@@ -291,20 +291,55 @@ Aprovar ou editar: análise vai para `aprovada` e `clausulas_analisadas` para `r
 
 ---
 
-## 8. Fora do escopo desta versão
-E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro, Recursos Humanos e Jurídico. No Jurídico: contencioso e acompanhamento processual, integração com tribunais, assinatura eletrônica, redigir contrato do zero, prazos e peças processuais.
+## 8. Operações
+
+Rota: `/operacoes`. Só para usuários com `operacoes` em `perfis.areas`. O que a área faz: planejar a reposição de estoque — varrer os produtos abaixo do ponto de reposição, dimensionar a compra de cada um e agrupar em ordens de compra por fornecedor para o comprador aprovar.
+
+### 8.1 Tabelas (`sql/operacoes.sql`)
+`fornecedores` (referência, importada de `dados/fornecedores.csv`, não recriada pelo app): `cod_fornecedor` (pk, `FOR001`…), `nome`, `prazo_entrega_dias` (int), `pedido_minimo_valor` (numeric), `homologado` (bool), `observacao` (text), `criado_em`.
+`parametros_estoque` (referência, importada de `dados/parametros_estoque.csv`, uma linha por produto de `produtos`): `cod_produto` (pk), `ponto_reposicao` (int), `estoque_maximo` (int), `consumo_medio_mensal` (numeric), `cod_fornecedor_preferencial` (text), `criado_em`.
+`ciclos_reposicao` (o lote, análogo a `extratos_importados`): `id_ciclo` (pk, `CR001`…), `disparado_em` (timestamptz default now()), `disparado_por` (uuid), `total_rupturas` (int), `status` (`novo` → `planejando` → `aguardando_aprovacao` → `concluido`).
+`itens_ruptura` (análogo a `divergencias`): `id` (uuid), `id_ciclo` (fk, on delete cascade), `cod_produto` (text), `estoque_atual` (int), `ponto_reposicao` (int), `cobertura_dias` (numeric, nullable), `analise` (jsonb — saída do Investigador), `status` (`novo` → `investigando` → `aguardando_aprovacao` → `resolvido`), `criado_em`.
+As **ordens de compra por fornecedor** não viram tabela: cada uma é uma linha em `aprovacoes` (`item_tipo = 'ordem'`, `item_id = id_ciclo`, `proposta = { ordem, relatorio, revisao }`). Realtime em `ciclos_reposicao` e `itens_ruptura`. RLS nas quatro tabelas (`tem_area('operacoes')`; escrita de `fornecedores` e `parametros_estoque` só `eh_admin()`).
+
+### 8.2 Tela
+Só para `operacoes` em `perfis.areas`. Botão **Planejar reposição** dispara um ciclo. Seletor dos ciclos recentes. Para o ciclo selecionado, `Organograma` (desenha investigador — fan-out —, consolidador, revisor) e cinco abas:
+- **Rupturas**: kanban de `itens_ruptura` do ciclo por `status` (`novo`, `investigando`, `aguardando_aprovacao`, `resolvido`). Cartão: cod_produto, descrição (join `produtos`), estoque atual / ponto de reposição, cobertura em dias e, depois do Investigador, a quantidade sugerida, o custo e a urgência.
+- **Relatório**: texto do Consolidador do ciclo (lido da primeira `aprovacoes` do ciclo).
+- **Aprovações**: `FilaAprovacao` da área `operacoes`.
+- **Fornecedores** e **Parâmetros**: tabelas só-leitura.
+Painel lateral com `LinhaDoTempo`. Realtime em `ciclos_reposicao` e `itens_ruptura`.
+
+### 8.3 Rota de API `POST /api/operacoes/planejar` (body: `{}` novo ciclo, ou `{ id_ciclo }` para reprocessar)
+`export const maxDuration = 60`. Exige sessão válida, `operacoes` em `perfis.areas`, `usar_agente = true` e `verificar-origem`.
+1. **Código:** varre `produtos` × `parametros_estoque`, seleciona `estoque < ponto_reposicao`, calcula `cobertura_dias = estoque / (consumo_medio_mensal / 30)`. Cria `ciclos_reposicao` e uma `itens_ruptura` por produto. Reprocessar apaga as `itens_ruptura` e as `aprovacoes` do ciclo antes. Se não houver ruptura, marca o ciclo `concluido` e retorna sem chamar agentes.
+2. Orquestrador `lib/orquestradores/operacoes.ts` cria a execução raiz.
+3. **Investigador**, um por ruptura, todos em `Promise.all`. Entrada `{ produto, parametros, cobertura_dias, fornecedor }`. Saída `{ quantidade_sugerida, custo_estimado, prazo_estimado_dias, urgencia, justificativa, cod_fornecedor }`. Cada `itens_ruptura` recebe a saída em `analise`.
+4. **Consolidador**: propostas divididas em lotes de até 4 (`consolidarEmLotes`), roda em paralelo, agrupa por fornecedor em `ordens` e devolve `relatorio_trecho`. Ordens do mesmo fornecedor em lotes diferentes são mescladas em código; o relatório final é o resumo (montado em código) + os trechos.
+5. **Revisor**: entrada `{ ordens, fornecedores, parametros, regras }`. Saída `{ aprovado, motivos: [] }`. Uma volta refazendo o Consolidador se reprovar.
+   - Depois da volta, uma checagem determinística em código confere: fornecedor homologado, `custo_total >= pedido_minimo_valor`, `estoque_atual + quantidade <= estoque_maximo`, e `custo_total` acima da alçada (`REGRAS_OPERACOES.alcada_valor`). Se algo não bater, força `revisao.aprovado = false` com o motivo — regra de compra com impacto não fica só a critério do modelo.
+6. Cada ordem por fornecedor vira um item em `aprovacoes` (`titulo = "<fornecedor> · <n> itens · R$ <custo_total>"`). `itens_ruptura` e o ciclo vão para `aguardando_aprovacao`. Fecha a execução raiz.
+7. Erro: execução raiz para `erro`, ciclo e `itens_ruptura` voltam para `novo`.
+
+### 8.4 Decisão na fila
+Aprovar ou editar: as `itens_ruptura` dos produtos da ordem vão para `resolvido`. Rejeitar: voltam para `novo` (com observação). Ambas gravam `decidido_por` e `decidido_em`. A pessoa emite o pedido de compra no sistema do fornecedor — o envio real fica fora do escopo.
 
 ---
 
-## 9. Segurança
+## 9. Fora do escopo desta versão
+E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro, Recursos Humanos, Jurídico e Operações. No Jurídico: contencioso e acompanhamento processual, integração com tribunais, assinatura eletrônica, redigir contrato do zero, prazos e peças processuais. Em Operações: emissão do pedido de compra no fornecedor, recebimento/conferência de mercadoria, expedição e rastreio de entregas, previsão de demanda além da média móvel.
+
+---
+
+## 10. Segurança
 
 Avaliação completa e histórico dos achados em `SEGURANCA.md`. Postura atual:
 
-- **RLS habilitado em todas as 17 tabelas**, com políticas por área (`lib/verificar-area.ts` no código espelha as mesmas regras: `perfis`, `execucoes_agentes`, `aprovacoes`, `pedidos_orcamento`, `clientes`, `produtos`, `titulos_receber`, `extratos_importados`, `lancamentos`, `divergencias`, `colaboradores`, `faixas_salariais`, `clausulas_padrao`, `analises_juridicas`, `clausulas_analisadas` — leitura/escrita só para quem tem a área correspondente em `perfis.areas`, com `clausulas_padrao` de escrita só `eh_admin()`; `perfis_usuario` só para `papel = admin`; `extrato_bancario` não é usada pelo app e fica sem política nenhuma). Duas funções auxiliares no banco: `eh_admin()` e `tem_area(area)`.
-- **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
-- **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário, minuta de contrato no Jurídico) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto direto são conferidas de novo em código, não dependem só do julgamento do modelo: preço, desconto e estoque em Vendas (`lib/orquestradores/vendas.ts`) contra o catálogo real; foro, teto de responsabilidade, temas vetados e alçada em Jurídico (`lib/orquestradores/juridico.ts`) contra as `clausulas_padrao`.
-- **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API. A minuta de contrato no Jurídico é colada como texto, com limite de 60 000 caracteres no navegador e no orquestrador.
-- **CSRF**: toda rota de mutação (`POST`/`PUT` em `/api/admin/*`, `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar`) confere que o header `Origin` (ou `Referer`, como fallback) bate com a própria origem da requisição antes de qualquer outra checagem (`lib/verificar-origem.ts`). Requisição sem os dois headers, ou com origem diferente, recebe 403.
+- **RLS habilitado em todas as 21 tabelas**, com políticas por área (`lib/verificar-area.ts` no código espelha as mesmas regras: `perfis`, `execucoes_agentes`, `aprovacoes`, `pedidos_orcamento`, `clientes`, `produtos`, `titulos_receber`, `extratos_importados`, `lancamentos`, `divergencias`, `colaboradores`, `faixas_salariais`, `clausulas_padrao`, `analises_juridicas`, `clausulas_analisadas`, `fornecedores`, `parametros_estoque`, `ciclos_reposicao`, `itens_ruptura` — leitura/escrita só para quem tem a área correspondente em `perfis.areas`, com `clausulas_padrao`, `fornecedores` e `parametros_estoque` de escrita só `eh_admin()`; `perfis_usuario` só para `papel = admin`; `extrato_bancario` não é usada pelo app e fica sem política nenhuma). Duas funções auxiliares no banco: `eh_admin()` e `tem_area(area)`.
+- **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar`, `/api/operacoes/planejar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
+- **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário, minuta de contrato no Jurídico) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto direto são conferidas de novo em código, não dependem só do julgamento do modelo: preço, desconto e estoque em Vendas (`lib/orquestradores/vendas.ts`) contra o catálogo real; foro, teto de responsabilidade, temas vetados e alçada em Jurídico (`lib/orquestradores/juridico.ts`) contra as `clausulas_padrao`; homologação de fornecedor, pedido mínimo, estoque máximo e alçada de compra em Operações (`lib/orquestradores/operacoes.ts`) contra `fornecedores` e `parametros_estoque`.
+- **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API. A minuta de contrato no Jurídico é colada como texto, com limite de 60 000 caracteres no navegador e no orquestrador. Operações não recebe arquivo: a varredura de rupturas é feita sobre os dados do ERP.
+- **CSRF**: toda rota de mutação (`POST`/`PUT` em `/api/admin/*`, `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar`, `/api/operacoes/planejar`) confere que o header `Origin` (ou `Referer`, como fallback) bate com a própria origem da requisição antes de qualquer outra checagem (`lib/verificar-origem.ts`). Requisição sem os dois headers, ou com origem diferente, recebe 403.
 - **Dependências**: `next` atualizado para `16.3.4` (era `^15.0.0`), `npm audit` sem vulnerabilidades conhecidas.
 
 Não há mais itens em aberto no `SEGURANCA.md`.

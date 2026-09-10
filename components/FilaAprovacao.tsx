@@ -68,6 +68,8 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   const temParecer = item?.item_tipo === 'analise' && typeof item?.proposta?.parecer === 'string'
   const redlines: any[] = (temParecer && item?.proposta?.redlines) || []
   const riscoAlto = temParecer && item?.proposta?.risco_geral === 'alto'
+  const ordem = item?.item_tipo === 'ordem' ? item?.proposta?.ordem : null
+  const temOrdem = !!ordem
   const triagemItens: any[] = item?.proposta?.triagem?.itens || []
   const itensNaoAtendidos: any[] = (item?.proposta?.contexto?.itens || [])
     .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
@@ -106,6 +108,15 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
         .from('clausulas_analisadas')
         .update({ status: decisao === 'aprovada' ? 'resolvida' : 'nova' })
         .eq('id_analise', it.item_id)
+    } else if (it.item_tipo === 'ordem') {
+      const cods: string[] = (it.proposta?.ordem?.itens || []).map((i: any) => i.cod_produto).filter(Boolean)
+      if (cods.length > 0) {
+        await supabase
+          .from('itens_ruptura')
+          .update({ status: decisao === 'aprovada' ? 'resolvido' : 'novo' })
+          .eq('id_ciclo', it.item_id)
+          .in('cod_produto', cods)
+      }
     } else if (it.item_tipo === 'divergencia') {
       const divergenciaId = it.proposta?.divergencia_id
       if (divergenciaId) {
@@ -350,6 +361,51 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
                     Dados completos (triagem, contexto, revisão)
                   </summary>
                   <pre className="preview" style={{ marginTop: 'var(--sp-2)' }}>{propostaEditada}</pre>
+                </details>
+              </>
+            ) : temOrdem ? (
+              <>
+                {revisaoReprovada && (
+                  <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-4)' }}>
+                    <Icon type="alerta" size="sm" />
+                    <span><strong>Reprovado na revisão:</strong> {motivosRevisao.join(' · ') || 'confira os dados.'}</span>
+                  </div>
+                )}
+
+                <div className="fila-meta-grade" style={{ marginTop: 'var(--sp-4)' }}>
+                  <div><span className="rotulo-mini">Fornecedor</span><br />{ordem.cod_fornecedor}</div>
+                  <div><span className="rotulo-mini">Custo total</span><br />R$ {Number(ordem.custo_total || 0).toFixed(2)}</div>
+                  <div><span className="rotulo-mini">Prazo</span><br />{ordem.prazo_estimado_dias ?? '—'} dias</div>
+                  <div><span className="rotulo-mini">Urgência</span><br />{ordem.urgencia || '—'}</div>
+                </div>
+
+                <div className="tabela-wrap" style={{ marginTop: 'var(--sp-4)' }}>
+                  <table className="tabela">
+                    <thead>
+                      <tr><th>Produto</th><th className="num">Quantidade</th><th className="num">Custo estimado</th></tr>
+                    </thead>
+                    <tbody>
+                      {(ordem.itens || []).map((it: any, i: number) => (
+                        <tr key={i}>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{it.cod_produto}</td>
+                          <td className="num">{it.quantidade}</td>
+                          <td className="num">R$ {Number(it.custo_estimado || 0).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <details style={{ marginTop: 'var(--sp-3)' }}>
+                  <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
+                    Editar ordem (JSON) e ver dados completos
+                  </summary>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 200, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', marginTop: 'var(--sp-2)' }}
+                    value={propostaEditada}
+                    onChange={(e) => setPropostaEditada(e.target.value)}
+                  />
                 </details>
               </>
             ) : temHipotese ? (

@@ -20,6 +20,7 @@ const AGENTES_POR_AREA: Record<string, string[]> = {
   financeiro: ['investigador', 'consolidador', 'revisor'],
   rh: ['triador', 'pesquisador', 'redator', 'revisor'],
   juridico: ['triador', 'pesquisador', 'investigador', 'redator', 'revisor'],
+  operacoes: ['investigador', 'consolidador', 'revisor'],
 }
 
 export function Organograma({ area, item_id }: { area: string; item_id: string }) {

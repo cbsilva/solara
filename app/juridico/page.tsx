@@ -176,7 +176,12 @@ export default function JuridicoPage() {
       valor_envolvido: valor && !isNaN(valor) ? valor : null,
       status: 'nova',
     })
-    if (!error) {
+    if (error) {
+      console.error('Erro ao criar análise:', error)
+      alert(`Não foi possível salvar a análise.\n\n${error.message}${error.hint ? `\n\n${error.hint}` : ''}`)
+      return
+    }
+    {
       setFContraparte('')
       setFTipo('fornecimento')
       setFValor('')
