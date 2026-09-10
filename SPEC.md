@@ -1,6 +1,6 @@
 # SPEC — Solara OS
 
-**O que o construtor precisa saber.** Este documento é lido pelo Claude Code. Cada seção é construída quando a instrução da aula pedir. Os nomes de seção são referenciados nas instruções: Fundação, Casca, Motor, Vendas, Financeiro.
+**O que o construtor precisa saber.** Este documento é lido pelo Claude Code. Cada seção é construída quando a instrução da aula pedir. Os nomes de seção são referenciados nas instruções: Fundação, Casca, Motor, Vendas, Financeiro, RH, Jurídico.
 
 ---
 
@@ -13,7 +13,7 @@ Duas camadas:
 - **Casca**: login, áreas, administração de usuários.
 - **Motor**: a função `agente()`, o registro de execuções, o organograma em tempo real e a fila de aprovação. O motor é o mesmo para toda área.
 
-Áreas nesta versão: Vendas e Financeiro. RH, Jurídico e Operações aparecem no menu como "em breve", desativadas.
+Áreas nesta versão: Vendas, Financeiro, RH e Jurídico. Operações aparece no menu como "em breve", desativada.
 
 Stack: Next.js App Router + TypeScript, Supabase (Auth, Postgres, Realtime), API Anthropic, Vercel. Ver CLAUDE.md.
 
@@ -256,20 +256,55 @@ Aprovar ou editar: faixa vai para `aprovada` e recebe `inicio = hoje` (a vigênc
 
 ---
 
-## 7. Fora do escopo desta versão
-E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro e Recursos Humanos.
+## 7. Jurídico
+
+Rota: `/juridico`. Só para usuários com `juridico` em `perfis.areas`.
+
+### 7.1 Tabelas (`sql/juridico.sql`)
+`clausulas_padrao` (a base jurídica da empresa, importada de `dados/clausulas_padrao.csv`, não recriada pelo app): `tema` (pk: `foro`, `multa_moratoria`, `juros`, `limitacao_responsabilidade`, `multa_rescisoria`, `prazo_pagamento`, `reajuste`, `garantia`, `exclusividade`, `rescisao`, `confidencialidade`, `lgpd`, `propriedade_intelectual`, `subcontratacao`, `forca_maior`, `prazo_entrega`), `posicao_padrao` (text), `limite` (jsonb, ex.: `{"pct_mes_max": 1}`), `clausula_vetada` (bool — tema que nunca passa sem ressalva formal), `fundamento` (text — referência legal resumida), `criado_em`.
+`analises_juridicas`: `id_analise` (pk, `AJ001`…), `contraparte` (text), `tipo_contrato` (text: `fornecimento`, `cliente`, `representacao_comercial`, `locacao`, `prestacao_servicos`, `transporte`, `nda`, `outro`), `texto_minuta` (text, máx. 60 000 caracteres), `valor_envolvido` (numeric, nullable), `risco_geral` (text: `baixo`/`medio`/`alto`, preenchido no fim), `status` (`nova` → `processando` → `aguardando_aprovacao` → `aprovada` \| `rejeitada`), `criado_em`.
+`clausulas_analisadas`: `id` (uuid), `id_analise` (fk), `tema` (text), `texto_clausula` (text, null quando é um tema ausente), `classificacao_risco` (`alinhada`/`ajuste`/`inaceitavel`), `analise` (jsonb — saída do Investigador), `status` (`nova` → `investigando` → `aguardando_aprovacao` → `resolvida`), `criado_em`.
+Realtime em `analises_juridicas` e `clausulas_analisadas`. RLS nas três tabelas (`tem_area('juridico')`; `clausulas_padrao` com escrita só `eh_admin()`).
+
+### 7.2 Tela
+Só para `juridico` em `perfis.areas`. Em cima: `Organograma` da análise selecionada (desenha triador, pesquisador, investigador — fan-out —, redator, revisor). Três abas:
+- **Análises**: kanban de `analises_juridicas` por `status` (`nova`, `processando`, `aguardando_aprovacao`, `aprovada`, `rejeitada`). Cartão: id, contraparte, tipo de contrato, valor, `risco_geral`, 80 primeiras letras da minuta. Cartões em `nova` têm o botão **Processar**. Botão **Nova análise** abre um formulário: contraparte, tipo de contrato (select), valor envolvido (opcional), texto da minuta (colar, máx. 60 000 caracteres). Salva com `status = nova` e `id_analise` sequencial. Ao selecionar uma análise, abaixo do Organograma aparecem as `clausulas_analisadas` em três faixas: Alinhadas / Ajuste sugerido / Inaceitáveis.
+- **Cláusulas-padrão**: tabela só-leitura de `clausulas_padrao` (tema, posição, limite, vetada, fundamento).
+- **Aprovações**: `FilaAprovacao` da área `juridico`.
+Clicar num cartão abre um painel lateral com `LinhaDoTempo`. O kanban se atualiza por Realtime.
+
+### 7.3 Rota de API `POST /api/juridico/processar` (body: `{ id_analise }`)
+`export const maxDuration = 60`. Exige sessão válida, `juridico` em `perfis.areas` e `usar_agente = true` (mais o `verificar-origem`). Executa o orquestrador de Jurídico (`lib/orquestradores/juridico.ts`):
+
+1. Atualiza a análise para `processando`. Cria a execução raiz `orquestrador`.
+2. **Triador**: entrada `{ texto_minuta, contraparte, tipo_contrato, valor_envolvido }`. Saída `{ tipo, resumo, objeto, partes, tipo_contrato_detectado, valor_detectado, observacoes }`. `tipo` é um de `analise_contrato`, `consulta`, `notificacao`, `fora_do_juridico`, `spam`, `outro`.
+   - Se `tipo` não for `analise_contrato`: cria item em `aprovacoes` com `titulo = "Não é análise de contrato: <tipo>"` e a saída do Triador como proposta; análise vai para `aguardando_aprovacao`; encerra.
+3. **Pesquisador**: em código, carrega toda a `clausulas_padrao` e as análises anteriores da mesma contraparte. Depois chama o agente `pesquisador` com `{ texto_minuta, temas_padrao, contraparte, analises_anteriores }` para segmentar a minuta: `{ clausulas: [{tema, texto_clausula, resumo}], temas_ausentes: [] }`. Em código, apaga as `clausulas_analisadas` de uma rodada anterior e grava uma linha por cláusula detectada e uma por tema ausente que seja vetado.
+4. **Investigador**, um por linha de `clausulas_analisadas`, todos em `Promise.all`. Entrada `{ tema, texto_clausula, tema_ausente, posicao_padrao, limite, clausula_vetada, fundamento }`. Saída `{ classificacao_risco, problema, impacto, sugestao_redacao, fundamento_citado, confianca }`. Cada linha é atualizada com o resultado.
+5. **Redator**: entrada `{ triagem, clausulas, temas_ausentes, contraparte }`. Saída `{ parecer, resumo, risco_geral, redlines: [{tema, de, para, justificativa}], ressalvas: [] }`.
+6. **Revisor**: entrada `{ parecer, clausulas, temas_ausentes, regras }` onde `regras` = `REGRAS_JURIDICO` (alçada, comarca da sede, tetos de multa/juros, temas vetados). Saída `{ aprovado, motivos: [] }`. No máximo 2 voltas chamando o Redator com `ajustes`.
+   - Depois da última volta, uma checagem determinística em código confere: cláusula `inaceitavel`, tema vetado fora do padrão, ausência de limitação de responsabilidade, `valor_envolvido` acima da alçada, e `risco_geral` coerente. Se algo não bater, força `revisao.aprovado = false` com o motivo e fixa `risco_geral = alto` — regra de negócio com impacto não fica só a critério do modelo.
+7. Cria item em `aprovacoes` (`item_tipo = analise`, `titulo = "<contraparte> · risco <nível> · <resumo>"`, `proposta = { parecer, redlines, ressalvas, risco_geral, triagem, clausulas, revisao }`). Análise vai para `aguardando_aprovacao` com o `risco_geral`; `clausulas_analisadas` para `aguardando_aprovacao`. Fecha a execução raiz.
+
+### 7.4 Decisão na fila
+Aprovar ou editar: análise vai para `aprovada` e `clausulas_analisadas` para `resolvida`. Rejeitar: análise vai para `rejeitada` (com observação) e `clausulas_analisadas` volta para `nova`. Ambas gravam `decidido_por` e `decidido_em`. O parecer aprovado é copiado por uma pessoa para negociar — envio à contraparte fica fora do escopo.
 
 ---
 
-## 8. Segurança
+## 8. Fora do escopo desta versão
+E-mail de entrada ou saída; OAuth; integração automática com ERP ou com sistema de RH; orquestrador decidido pelo modelo (tool use); áreas além de Vendas, Financeiro, Recursos Humanos e Jurídico. No Jurídico: contencioso e acompanhamento processual, integração com tribunais, assinatura eletrônica, redigir contrato do zero, prazos e peças processuais.
+
+---
+
+## 9. Segurança
 
 Avaliação completa e histórico dos achados em `SEGURANCA.md`. Postura atual:
 
-- **RLS habilitado em todas as 14 tabelas**, com políticas por área (`lib/verificar-area.ts` no código espelha as mesmas regras: `perfis`, `execucoes_agentes`, `aprovacoes`, `pedidos_orcamento`, `clientes`, `produtos`, `titulos_receber`, `extratos_importados`, `lancamentos`, `divergencias`, `colaboradores`, `faixas_salariais` — leitura/escrita só para quem tem a área correspondente em `perfis.areas`; `perfis_usuario` só para `papel = admin`; `extrato_bancario` não é usada pelo app e fica sem política nenhuma). Duas funções auxiliares no banco: `eh_admin()` e `tem_area(area)`.
-- **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
-- **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto financeiro direto (preço, desconto, estoque) em Vendas são conferidas de novo em código (`lib/orquestradores/vendas.ts`) contra os dados reais do catálogo, não dependem só do julgamento do modelo.
-- **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API.
-- **CSRF**: toda rota de mutação (`POST`/`PUT` em `/api/admin/*`, `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`) confere que o header `Origin` (ou `Referer`, como fallback) bate com a própria origem da requisição antes de qualquer outra checagem (`lib/verificar-origem.ts`). Requisição sem os dois headers, ou com origem diferente, recebe 403.
+- **RLS habilitado em todas as 17 tabelas**, com políticas por área (`lib/verificar-area.ts` no código espelha as mesmas regras: `perfis`, `execucoes_agentes`, `aprovacoes`, `pedidos_orcamento`, `clientes`, `produtos`, `titulos_receber`, `extratos_importados`, `lancamentos`, `divergencias`, `colaboradores`, `faixas_salariais`, `clausulas_padrao`, `analises_juridicas`, `clausulas_analisadas` — leitura/escrita só para quem tem a área correspondente em `perfis.areas`, com `clausulas_padrao` de escrita só `eh_admin()`; `perfis_usuario` só para `papel = admin`; `extrato_bancario` não é usada pelo app e fica sem política nenhuma). Duas funções auxiliares no banco: `eh_admin()` e `tem_area(area)`.
+- **Rotas de API exigem sessão válida** (`lib/supabase/server.ts` → `getUsuarioAutenticado`, lê a sessão pelos cookies) **e a checagem correspondente**: `/api/admin/*` exige `papel = admin` (`lib/verificar-admin.ts`); `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar` exigem a área da rota em `perfis.areas` (`lib/verificar-area.ts`) e `usar_agente = true` (`lib/verificar-permissao-agente.ts`).
+- **Prompt injection**: os prompts que recebem texto livre de fora (mensagem do cliente, justificativa de RH, descrição do extrato bancário, minuta de contrato no Jurídico) instruem o modelo a tratar esse texto como dado a classificar, nunca como instrução. Regras de negócio com impacto direto são conferidas de novo em código, não dependem só do julgamento do modelo: preço, desconto e estoque em Vendas (`lib/orquestradores/vendas.ts`) contra o catálogo real; foro, teto de responsabilidade, temas vetados e alçada em Jurídico (`lib/orquestradores/juridico.ts`) contra as `clausulas_padrao`.
+- **Upload de arquivos** (extrato/títulos em Financeiro) tem limite de 5MB, no navegador e na rota de API. A minuta de contrato no Jurídico é colada como texto, com limite de 60 000 caracteres no navegador e no orquestrador.
+- **CSRF**: toda rota de mutação (`POST`/`PUT` em `/api/admin/*`, `/api/vendas/processar`, `/api/financeiro/conciliar`, `/api/financeiro/importar`, `/api/rh/processar`, `/api/juridico/processar`) confere que o header `Origin` (ou `Referer`, como fallback) bate com a própria origem da requisição antes de qualquer outra checagem (`lib/verificar-origem.ts`). Requisição sem os dois headers, ou com origem diferente, recebe 403.
 - **Dependências**: `next` atualizado para `16.3.4` (era `^15.0.0`), `npm audit` sem vulnerabilidades conhecidas.
 
 Não há mais itens em aberto no `SEGURANCA.md`.

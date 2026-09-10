@@ -29,6 +29,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [propostaEditada, setPropostaEditada] = useState('')
   const [respostaEditada, setRespostaEditada] = useState('')
+  const [parecerEditado, setParecerEditado] = useState('')
   const [explicacaoEditada, setExplicacaoEditada] = useState('')
   const [valorABaixarEditado, setValorABaixarEditado] = useState('')
   const [valorPendenteEditado, setValorPendenteEditado] = useState('')
@@ -64,6 +65,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
 
   const item = selecionado ? itens.find((i) => i.id === selecionado) : null
   const temResposta = typeof item?.proposta?.resposta === 'string'
+  const temParecer = item?.item_tipo === 'analise' && typeof item?.proposta?.parecer === 'string'
+  const redlines: any[] = (temParecer && item?.proposta?.redlines) || []
+  const riscoAlto = temParecer && item?.proposta?.risco_geral === 'alto'
   const triagemItens: any[] = item?.proposta?.triagem?.itens || []
   const itensNaoAtendidos: any[] = (item?.proposta?.contexto?.itens || [])
     .map((it: any, idx: number) => ({ ...it, descricao_cliente: triagemItens[idx]?.descricao_cliente }))
@@ -93,6 +97,15 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
             : { status: 'rejeitada' }
         )
         .eq('id_faixa', it.item_id)
+    } else if (it.item_tipo === 'analise') {
+      await supabase
+        .from('analises_juridicas')
+        .update({ status: decisao === 'aprovada' ? 'aprovada' : 'rejeitada' })
+        .eq('id_analise', it.item_id)
+      await supabase
+        .from('clausulas_analisadas')
+        .update({ status: decisao === 'aprovada' ? 'resolvida' : 'nova' })
+        .eq('id_analise', it.item_id)
     } else if (it.item_tipo === 'divergencia') {
       const divergenciaId = it.proposta?.divergencia_id
       if (divergenciaId) {
@@ -131,6 +144,8 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
     if (editada) {
       if (temResposta) {
         propostaFinal = { ...item.proposta, resposta: respostaEditada }
+      } else if (temParecer) {
+        propostaFinal = { ...item.proposta, parecer: parecerEditado }
       } else if (temHipotese) {
         const valor_a_baixar = Number(valorABaixarEditado)
         const valor_pendente = Number(valorPendenteEditado)
@@ -165,6 +180,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       setSelecionado(null)
       setPropostaEditada('')
       setRespostaEditada('')
+      setParecerEditado('')
       setExplicacaoEditada('')
       setValorABaixarEditado('')
       setValorPendenteEditado('')
@@ -195,6 +211,7 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
       setObservacao('')
       setPropostaEditada('')
       setRespostaEditada('')
+      setParecerEditado('')
       setExplicacaoEditada('')
       setValorABaixarEditado('')
       setValorPendenteEditado('')
@@ -222,6 +239,9 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
               setSelecionado(it.id)
               setPropostaEditada(JSON.stringify(it.proposta, null, 2))
               setRespostaEditada(typeof it.proposta?.resposta === 'string' ? it.proposta.resposta : '')
+              setParecerEditado(
+                it.item_tipo === 'analise' && typeof it.proposta?.parecer === 'string' ? it.proposta.parecer : ''
+              )
               const hip = it.item_tipo === 'divergencia' ? it.proposta?.hipotese : null
               setExplicacaoEditada(hip?.explicacao || '')
               setValorABaixarEditado(hip?.valor_a_baixar != null ? String(hip.valor_a_baixar) : '')
@@ -267,7 +287,53 @@ export function FilaAprovacao({ area, usuarioId }: { area: string; usuarioId: st
               </div>
             )}
 
-            {temResposta ? (
+            {temParecer ? (
+              <>
+                {riscoAlto && (
+                  <div className="aviso aviso--erro" style={{ marginTop: 'var(--sp-4)' }}>
+                    <Icon type="alerta" size="sm" />
+                    <span><strong>Risco geral: alto</strong> — leia o parecer antes de aprovar.</span>
+                  </div>
+                )}
+
+                <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
+                  <label>Parecer jurídico</label>
+                  <textarea
+                    className="input"
+                    style={{ minHeight: 260, whiteSpace: 'pre-wrap' }}
+                    value={parecerEditado}
+                    onChange={(e) => setParecerEditado(e.target.value)}
+                  />
+                </div>
+
+                {redlines.length > 0 && (
+                  <details style={{ marginTop: 'var(--sp-3)' }} open>
+                    <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
+                      Sugestões de redação ({redlines.length})
+                    </summary>
+                    <div style={{ marginTop: 'var(--sp-2)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+                      {redlines.map((r, i) => (
+                        <div key={i} className="card" style={{ padding: 'var(--sp-3)' }}>
+                          <div className="rotulo-mini">{r.tema}</div>
+                          <div style={{ marginTop: 4 }}><strong>De:</strong> {r.de || '—'}</div>
+                          <div style={{ marginTop: 4 }}><strong>Para:</strong> {r.para || '—'}</div>
+                          {r.justificativa && (
+                            <div style={{ marginTop: 4, color: 'var(--text-muted)' }}>{r.justificativa}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                <details style={{ marginTop: 'var(--sp-3)' }}>
+                  <summary className="rotulo-mini" style={{ cursor: 'pointer' }}>
+                    Dados completos (triagem, cláusulas, revisão)
+                  </summary>
+                  <pre className="preview" style={{ marginTop: 'var(--sp-2)' }}>{propostaEditada}</pre>
+                </details>
+              </>
+            ) : temResposta ? (
               <>
                 <div className="field" style={{ marginTop: 'var(--sp-4)' }}>
                   <label>Resposta ao cliente</label>
