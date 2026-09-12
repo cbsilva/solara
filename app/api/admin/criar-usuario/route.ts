@@ -1,5 +1,5 @@
 import { createServerClient, getUsuarioAutenticado } from '@/lib/supabase/server'
-import { verificarAdmin } from '@/lib/verificar-admin'
+import { verificarAdminReal } from '@/lib/verificar-admin'
 import { verificarOrigem } from '@/lib/verificar-origem'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     if (!usuario) {
       return NextResponse.json({ erro: 'Usuário não autenticado' }, { status: 401 })
     }
-    await verificarAdmin(usuario.id)
+    await verificarAdminReal(usuario.id)
 
     const { email, senha, nome, papel, areas } = await req.json()
 

@@ -14,6 +14,7 @@ interface Usuario {
 
 export default function AdminUsuariosPage() {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null)
+  const [demo, setDemo] = useState(false)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState<string | null>(null)
@@ -29,6 +30,13 @@ export default function AdminUsuariosPage() {
         return
       }
       setUser({ id: session.user.id, email: session.user.email || '' })
+
+      const { data: perfil } = await supabase.from('perfis').select().eq('id', session.user.id).single()
+      if (perfil?.papel !== 'admin') {
+        router.push('/')
+        return
+      }
+      setDemo(Boolean(perfil.demo))
 
       // Buscar todos os usuários com seus perfis
       const { data: usuariosData } = await supabase
@@ -107,6 +115,13 @@ export default function AdminUsuariosPage() {
           </div>
         </div>
 
+        {demo && (
+          <div className="aviso aviso--erro" style={{ marginBottom: 'var(--sp-4)' }}>
+            <Icon type="alerta" size="sm" />
+            <span>Modo demonstração: alterar permissões de agentes está desabilitado.</span>
+          </div>
+        )}
+
         {mensagem && (
           <div
             style={{
@@ -156,13 +171,13 @@ export default function AdminUsuariosPage() {
                         type="button"
                         className="btn btn--sm"
                         onClick={() => alternarPermissao(u.id, !u.usar_agente)}
-                        disabled={salvando === u.id}
+                        disabled={demo || salvando === u.id}
                         style={{
                           background: u.usar_agente ? 'var(--danger)' : 'var(--success)',
                           color: 'white',
                           border: 'none',
-                          cursor: salvando === u.id ? 'not-allowed' : 'pointer',
-                          opacity: salvando === u.id ? 0.6 : 1,
+                          cursor: demo || salvando === u.id ? 'not-allowed' : 'pointer',
+                          opacity: demo || salvando === u.id ? 0.5 : 1,
                         }}
                       >
                         {salvando === u.id ? (

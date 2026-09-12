@@ -12,14 +12,15 @@
 
 -- ---- Pre-requisito: funcoes de autorizacao (idempotente) -----------------
 -- Repetido aqui para o arquivo rodar sozinho num banco recem-criado. Fonte
--- canonica: sql/00_funcoes_auth.sql.
+-- canonica: sql/00_funcoes_auth.sql. O parametro de tem_area e `area_requerida`
+-- (nao renomear: +20 politicas RLS dependem da assinatura tem_area(text)).
 create or replace function eh_admin()
   returns boolean language sql stable security definer set search_path = public
-as $$ select exists (select 1 from perfis where id = auth.uid() and papel = 'admin'); $$;
+as $$ select papel = 'admin' from perfis where id = auth.uid(); $$;
 
-create or replace function tem_area(area text)
+create or replace function tem_area(area_requerida text)
   returns boolean language sql stable security definer set search_path = public
-as $$ select exists (select 1 from perfis where id = auth.uid() and (papel = 'admin' or area = any(areas))); $$;
+as $$ select area_requerida = any(areas) from perfis where id = auth.uid(); $$;
 
 grant execute on function eh_admin() to anon, authenticated;
 grant execute on function tem_area(text) to anon, authenticated;

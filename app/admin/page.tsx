@@ -14,6 +14,7 @@ interface Perfil {
   nome: string
   papel: string
   areas: string[]
+  demo?: boolean
 }
 
 const AREAS = ['vendas', 'financeiro', 'rh', 'juridico', 'operacoes']
@@ -22,6 +23,7 @@ const PAPEIS = ['operador', 'admin']
 export default function AdminPage() {
   const [perfis, setPerfis] = useState<Perfil[]>([])
   const [user, setUser] = useState<{ email: string; id: string } | null>(null)
+  const [demo, setDemo] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [aba, setAba] = useState<'usuarios' | 'agentes'>('usuarios')
   const router = useRouter()
@@ -56,6 +58,7 @@ export default function AdminPage() {
         router.push('/')
         return
       }
+      setDemo(Boolean((perfil as Perfil)?.demo))
 
       await buscarPerfis()
       setCarregando(false)
@@ -156,6 +159,13 @@ export default function AdminPage() {
       <Header contexto="Administração" usuarioEmail={user?.email} mostraInicio mostraLogout />
 
       <main className="app-main">
+        {demo && (
+          <div className="aviso aviso--erro" style={{ marginBottom: 'var(--sp-4)' }}>
+            <Icon type="alerta" size="sm" />
+            <span>Modo demonstração: você navega por toda a administração, mas criar/editar usuário e alterar permissões de agentes estão desabilitados.</span>
+          </div>
+        )}
+
         <div style={{ marginBottom: 'var(--sp-6)', borderBottom: '1px solid var(--border)', paddingBottom: 'var(--sp-4)' }}>
           <h1 className="app-titulo">Administração</h1>
           <div style={{ display: 'flex', gap: 'var(--sp-4)', marginTop: 'var(--sp-4)' }}>
@@ -207,6 +217,7 @@ export default function AdminPage() {
                   <Icon type="conta" size="md" />
                   Novo usuário
                 </div>
+                <fieldset disabled={demo} style={{ border: 'none', padding: 0, margin: 0 }}>
                 <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
                   <div className="field">
                     <label htmlFor="a-email">E-mail</label>
@@ -257,11 +268,12 @@ export default function AdminPage() {
                   )}
                 </div>
                 <div className="card-foot">
-                  <button type="submit" className="btn btn--primary" disabled={criando}>
+                  <button type="submit" className="btn btn--primary" disabled={criando || demo}>
                     {criando ? <span className="spinner" /> : <Icon type="check" size="sm" />}
                     {criando ? 'Criando…' : 'Criar usuário'}
                   </button>
                 </div>
+                </fieldset>
               </form>
               )}
 
@@ -361,7 +373,8 @@ export default function AdminPage() {
                               type="button"
                               className="btn btn--sm"
                               onClick={() => iniciarEdicao(perfil)}
-                              style={{ background: 'var(--info)', color: 'white', border: 'none' }}
+                              disabled={demo}
+                              style={{ background: 'var(--info)', color: 'white', border: 'none', opacity: demo ? 0.5 : 1, cursor: demo ? 'not-allowed' : 'pointer' }}
                             >
                               <Icon type="editar" size="sm" />
                               Editar
@@ -378,14 +391,14 @@ export default function AdminPage() {
         )}
 
         {aba === 'agentes' && (
-          <AdminAgentes />
+          <AdminAgentes demo={demo} />
         )}
       </main>
     </div>
   )
 }
 
-function AdminAgentes() {
+function AdminAgentes({ demo }: { demo: boolean }) {
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState<string | null>(null)
@@ -505,13 +518,13 @@ function AdminAgentes() {
                       type="button"
                       className="btn btn--sm"
                       onClick={() => alternarPermissao(u.id, !u.usar_agente)}
-                      disabled={salvando === u.id}
+                      disabled={demo || salvando === u.id}
                       style={{
                         background: u.usar_agente ? 'var(--danger)' : 'var(--success)',
                         color: 'white',
                         border: 'none',
-                        cursor: salvando === u.id ? 'not-allowed' : 'pointer',
-                        opacity: salvando === u.id ? 0.6 : 1,
+                        cursor: demo || salvando === u.id ? 'not-allowed' : 'pointer',
+                        opacity: demo || salvando === u.id ? 0.5 : 1,
                       }}
                     >
                       {salvando === u.id ? 'Salvando…' : u.usar_agente ? 'Desativar' : 'Ativar'}

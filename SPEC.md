@@ -39,8 +39,11 @@ Stack: Next.js App Router + TypeScript, Supabase (Auth, Postgres, Realtime), API
 | papel | text | `admin` ou `operador` |
 | areas | text[] | ex.: `{vendas, financeiro}` |
 | criado_em | timestamptz | default now() |
+| demo | boolean | default `false`. Ver "usuário demo" abaixo |
 
 Ao criar um usuário no Supabase Auth, o admin também cria a linha em `perfis`. Para a aula: o primeiro usuário (o instrutor) é criado direto no painel do Supabase com `papel = admin` e todas as áreas.
+
+**Usuário demo ("admin sem poderes"):** `papel = 'admin'` com `demo = true`. Navega por qualquer tela (inclusive `/admin`, porque a checagem de acesso é por `papel`), mas não executa nenhuma ação de administrador de verdade — ver 2.3 e 2.4. `demo` é lido e travado por `eh_demo()` (`sql/perfis_demo.sql`), no mesmo padrão de `eh_admin()`/`tem_area()`.
 
 ### 2.2 Menu de áreas (`/`)
 Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em `perfis.areas`), RH, Jurídico, Operações (ativos, só aparecem se o usuário tem a área em `perfis.areas`). Nenhum "em breve" nesta versão.
@@ -48,7 +51,7 @@ Cartões: Vendas, Financeiro (ativos, só aparecem se o usuário tem a área em 
 ### 2.3 Admin (`/admin`, só `papel = admin`)
 Tabela de perfis com: e-mail, nome, papel, áreas. Formulário para criar usuário (e-mail, senha inicial, nome, papel, áreas). Usa a service role numa rota de API para criar no Auth e em `perfis`.
 
-As rotas `POST /api/admin/criar-usuario`, `PUT /api/admin/editar-usuario` e `GET /api/admin/listar-usuarios` exigem sessão válida **e** `perfis.papel = 'admin'` do chamador (`lib/verificar-admin.ts`) — verificado no servidor, não só escondido na tela.
+As rotas `POST /api/admin/criar-usuario`, `PUT /api/admin/editar-usuario` e `GET /api/admin/listar-usuarios` exigem sessão válida **e** `perfis.papel = 'admin'` do chamador (`lib/verificar-admin.ts`) — verificado no servidor, não só escondido na tela. As duas primeiras (as que escrevem) também exigem `perfis.demo = false`: usuário demo autenticado vê a tela, mas o formulário de criar usuário e o botão Editar ficam desabilitados, e uma chamada direta às rotas é recusada com 403 mesmo assim.
 
 ### 2.4 Tabela `perfis_usuario` e permissão de uso de agentes
 | coluna | tipo | obs |
@@ -60,7 +63,7 @@ As rotas `POST /api/admin/criar-usuario`, `PUT /api/admin/editar-usuario` e `GET
 
 Controla, por usuário, se ele pode disparar o processamento por agentes (independente do `papel`/`areas` de `perfis`, que controlam acesso à área). Toda rota de API que executa um orquestrador (`POST /api/vendas/processar`, `POST /api/financeiro/conciliar`, `POST /api/rh/processar`) chama `verificarPermissaoAgente` (`lib/verificar-permissao-agente.ts`) antes de rodar; se `usar_agente` for `false` ou a linha não existir, recusa com erro.
 
-Aba **Permissões de Agentes** em `/admin`: lista todos os usuários com um toggle Ativar/Desativar que faz upsert em `perfis_usuario`.
+Aba **Permissões de Agentes** em `/admin`: lista todos os usuários com um toggle Ativar/Desativar que faz upsert em `perfis_usuario` direto do navegador (via supabase-js, sem rota de API). RLS em `perfis_usuario` (`sql/perfis_demo.sql`): qualquer admin (real ou demo) lê a tabela, mas só admin com `demo = false` consegue inserir/atualizar — usuário demo vê os toggles desabilitados na tela, e mesmo chamando `perfis_usuario.upsert(...)` direto pelo console do navegador a escrita é recusada pela policy.
 
 ---
 

@@ -17,6 +17,7 @@ rodar um módulo isolado num banco novo também funciona.)
 | 3 | `rh.sql` | `colaboradores`, `faixas_salariais` |
 | 4 | `juridico.sql` | `clausulas_padrao`, `analises_juridicas`, `clausulas_analisadas` |
 | 5 | `operacoes.sql` | `fornecedores`, `parametros_estoque`, `ciclos_reposicao`, `itens_ruptura` |
+| 6 | `perfis_demo.sql` | coluna `perfis.demo`, funcao `eh_demo()`, RLS em `perfis_usuario` |
 
 `perfis` e as tabelas do ERP (`clientes`, `produtos`, `pedidos_orcamento`, `titulos_receber`,
 `extrato_bancario`) já devem existir (importadas dos CSVs de `dados/`).
